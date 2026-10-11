@@ -1,0 +1,181 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useDb } from '../data/DbContext'
+import { carregarBase, custoDaVariante, type Base } from '../data/calculos'
+import { registrarVenda } from '../data/repos'
+import { listarClientes, listarEncomendas, salvarEncomenda, type ClienteRow, type EncomendaRow } from '../data/phase3'
+import { formatBRL } from '../domain/money'
+import { formatBRDate } from '../domain/date'
+import { Campo, Selecao } from './ui'
+
+const FORMAS: [string, string][] = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']]
+const padraoData = () => {
+  const hoje = new Date()
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
+}
+const proximoDia = (data: string) => {
+  const proximo = new Date(`${data}T12:00:00`)
+  proximo.setDate(proximo.getDate() + 1)
+  return `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-${String(proximo.getDate()).padStart(2, '0')}`
+}
+const STATUS_ENCOMENDA: Record<EncomendaRow['status'], string> = {
+  pedido: 'Pedido', produzindo: 'Produzindo', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado', pago: 'Pago',
+}
+export default function Vender() {
+  const db = useDb()
+  const nav = useNavigate()
+  const [base, setBase] = useState<Base | null>(null)
+  const [carrinho, setCarrinho] = useState<Record<string, number>>({})
+  const [forma, setForma] = useState('')
+  const [clienteId, setClienteId] = useState('')
+  const [clientes, setClientes] = useState<ClienteRow[]>([])
+  const [encomendas, setEncomendas] = useState<EncomendaRow[]>([])
+  const [desconto, setDesconto] = useState('')
+  const [modo, setModo] = useState<'agora' | 'agendada'>('agora')
+  const [dataEntrega, setDataEntrega] = useState(padraoData())
+  const [observacoes, setObservacoes] = useState('')
+  const [motivoEstoquePendente, setMotivoEstoquePendente] = useState('')
+  const [motivoEstoque, setMotivoEstoque] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => {
+    let ativo = true
+    void Promise.all([carregarBase(db), listarClientes(db), listarEncomendas(db)]).then(([dados, customers, orders]) => {
+      if (ativo) { setBase(dados); setClientes(customers); setEncomendas(orders) }
+    })
+      .catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : String(e)) })
+    return () => { ativo = false }
+  }, [db])
+  if (!base) return erro
+    ? <p className="notice error" role="alert">{erro}</p>
+    : <p className="notice" role="status">Carregando produtos...</p>
+
+  const itens = base.variantes.filter((v) => carrinho[v.id])
+  const subtotal = itens.reduce((s, v) => s + carrinho[v.id] * v.preco_cents, 0)
+  const descontoCents = Math.round(Number(desconto || 0) * 100)
+  const total = modo === 'agora' ? Math.max(0, subtotal - descontoCents) : subtotal
+  const hoje = padraoData()
+  const dataMinimaEncomenda = proximoDia(hoje)
+  const mudar = (id: string, d: number) => setCarrinho((atual) => ({ ...atual, [id]: Math.max(0, (atual[id] ?? 0) + d) }))
+  const definirQuantidade = (id: string, valor: string) => {
+    const quantidade = Math.max(1, Math.floor(Number(valor) || 1))
+    setCarrinho((atual) => ({ ...atual, [id]: quantidade }))
+  }
+  const finalizar = async (motivoEstoqueNegativo?: string) => {
+    if (!itens.length || salvando || !clienteId || (modo === 'agora' && (!forma || descontoCents > subtotal))
+      || (modo === 'agendada' && (!dataEntrega || dataEntrega < dataMinimaEncomenda))) return
+    setSalvando(true)
+    setErro('')
+    try {
+      if (modo === 'agendada') {
+        await salvarEncomenda(db, {
+          clienteId: clienteId || undefined,
+          dataEntrega,
+          sinalCents: 0,
+          observacoes,
+          itens: itens.map((v) => ({ varianteId: v.id, quantidade: carrinho[v.id], precoUnitCents: v.preco_cents })),
+        })
+        nav('/encomendas')
+        return
+      }
+      const venda = (reason?: string) => registrarVenda(db, {
+        forma,
+        clienteId: clienteId || null,
+        descontoCents,
+        motivoEstoqueNegativo: reason,
+        itens: itens.map((v) => ({ varianteId: v.id, quantidade: carrinho[v.id], precoCents: v.preco_cents, custoCents: custoDaVariante(v, base) })),
+      })
+      let id: string
+      try {
+        id = await venda(motivoEstoqueNegativo)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (motivoEstoqueNegativo || !message.includes('Informe o motivo para confirmar saldo negativo')) throw error
+        setMotivoEstoquePendente(message)
+        return
+      }
+      nav(`/venda/${id}`)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <>
+      <h1>Vendas</h1>
+      <p className="sb">Venda agora ou agende uma encomenda.</p>
+      <div className="sg" role="group" aria-label="Tipo de pedido">
+        <button type="button" className={modo === 'agora' ? 'a' : ''} onClick={() => setModo('agora')}>Vender agora</button>
+        <button type="button" className={modo === 'agendada' ? 'a' : ''} onClick={() => { setModo('agendada'); if (dataEntrega < dataMinimaEncomenda) setDataEntrega(dataMinimaEncomenda) }}>Agendar encomenda</button>
+      </div>
+      {erro && <p className="notice error" role="alert">{erro}</p>}
+      {base.variantes.length === 0 && <p className="notice">Cadastre um produto em Mais, Produtos à venda.</p>}
+      <section className="cd order-intro-card">
+        <h2>Pedido</h2>
+        <Selecao rotulo="Cliente obrigatório" placeholder="Selecionar cliente" id="venda.cliente" valor={clienteId}
+          onChange={setClienteId} opcoes={clientes.map((customer) => [customer.id, customer.nome])} />
+        <div className="order-intro-summary"><span>Quantidade</span><b>{itens.reduce((sum, item) => sum + carrinho[item.id], 0) || 0} pacote(s)</b></div>
+      </section>
+      {clienteId && <>
+      <section className="sales-products">
+        <div className="g product-grid">
+        {base.variantes.map((v) => (
+          <button className="tl" key={v.id} data-testid="venda.produto" onClick={() => mudar(v.id, 1)}>
+            <span className="product-add" aria-hidden="true">+</span>
+            <strong>{v.produto_nome}</strong><b>{v.nome}</b>{formatBRL(v.preco_cents)}
+          </button>
+        ))}
+        </div>
+      </section>
+      {itens.length > 0 && <div className="cd cart-card">
+          <h2>Encomenda</h2>
+          {modo === 'agendada' ? <>
+            <Campo rotulo="Data da entrega" id="encomenda.data" tipo="date" valor={dataEntrega} min={dataMinimaEncomenda} onChange={setDataEntrega} />
+            <Campo rotulo="Observações" id="encomenda.observacoes" valor={observacoes} onChange={setObservacoes} />
+          </> : <>
+            <Campo rotulo="Data da venda" id="venda.data" tipo="date" valor={hoje} onChange={() => undefined} readOnly />
+            <Campo rotulo="Desconto (R$)" id="venda.desconto" valor={desconto} onChange={setDesconto} mascara="dinheiro" />
+          </>}
+          {descontoCents > subtotal && <p className="notice error" role="alert">O desconto não pode ser maior que o subtotal.</p>}
+         </div>}
+      {modo === 'agora' && itens.length > 0 && <div className="sg approved-payment" role="group" aria-label="Forma de pagamento">
+        {FORMAS.map(([value, label]) => <button key={value} type="button" className={forma === value ? 'a' : ''} onClick={() => setForma(value)}>{label}</button>)}
+      </div>}
+      {itens.length > 0 && (
+        <div className="sales-summary" role="region" aria-label="Resumo do carrinho">
+          <div><small>{itens.reduce((sum, item) => sum + carrinho[item.id], 0)} itens</small><b>{formatBRL(total)}</b></div>
+          <button className="bt" data-testid="venda.finalizar"
+            disabled={salvando || !clienteId || (modo === 'agora' && (!forma || descontoCents > subtotal))
+              || (modo === 'agendada' && (!dataEntrega || dataEntrega < dataMinimaEncomenda))}
+            onClick={() => void finalizar()}>
+            {salvando ? 'Salvando...' : modo === 'agora' ? 'Finalizar' : 'Salvar encomenda'}
+          </button>
+        </div>
+      )}
+      </>}
+      {motivoEstoquePendente && <section className="cd stock-modal" role="alertdialog" aria-modal="true" aria-labelledby="motivo-estoque-titulo">
+        <h2 id="motivo-estoque-titulo">Confirmar venda com estoque negativo</h2>
+        <p className="notice error">{motivoEstoquePendente}</p>
+        <Campo rotulo="Motivo" id="venda.motivo-estoque" valor={motivoEstoque} onChange={setMotivoEstoque} />
+        <div className="alert-actions">
+          <button className="lk" type="button" onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }}>Cancelar</button>
+          <button className="bt" type="button" disabled={!motivoEstoque.trim() || salvando} onClick={() => { setMotivoEstoquePendente(''); void finalizar(motivoEstoque.trim()) }}>Confirmar venda</button>
+        </div>
+      </section>}
+      {false && <section className="cd orders-card">
+        <h2>Encomendas em andamento</h2>
+        {!encomendas.filter((order) => ['pedido', 'produzindo', 'pronto'].includes(order.status)).length
+          ? <p className="notice">Nenhuma encomenda em andamento.</p>
+          : encomendas.filter((order) => ['pedido', 'produzindo', 'pronto'].includes(order.status)).slice(0, 5).map((order) => (
+            <div className="order-row" key={order.id}>
+              <div><b>{order.cliente_nome || 'Cliente não informado'}</b><small>{formatBRDate(order.data_entrega.slice(0, 10))} · {formatBRL(order.total_cents)}</small></div>
+              <span className="pl">{STATUS_ENCOMENDA[order.status]}</span>
+            </div>
+          ))}
+        <button className="bt o" type="button" onClick={() => nav('/encomendas')}>Ver pedidos</button>
+      </section>}
+    </>
+  )
+}

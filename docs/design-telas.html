@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MZ Gestão — Design das telas</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+:root{--bg:#F6EEE0;--cd:#FFFDF8;--ink:#3B2111;--mu:#80664F;--go:#B98A3E;--gl:#E8C98A;--br:#5A2F17;--ln:#EADDC4;--ok:#4F8A4B;--wn:#D2762B;--sh:0 8px 24px rgba(90,47,23,.09);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1B120C;--cd:#2A1D14;--ink:#F5E9D5;--mu:#BFA98C;--ln:#40301F;--sh:none}}
+:root[data-theme="dark"]{--bg:#1B120C;--cd:#2A1D14;--ink:#F5E9D5;--mu:#BFA98C;--ln:#40301F;--sh:none}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--ink);font:14px/1.4 "Plus Jakarta Sans",system-ui,sans-serif;padding:12px}
+.ct{display:flex;gap:6px;overflow-x:auto;padding:2px 0 12px;max-width:390px;margin:0 auto}
+.ch{flex:none;border:0;background:var(--cd);color:var(--mu);border-radius:20px;padding:7px 13px;font:600 12px inherit;box-shadow:var(--sh)}
+.ch.on{background:var(--br);color:var(--gl)}
+.ph{position:relative;max-width:390px;height:780px;margin:0 auto;border-radius:38px;background:var(--bg);overflow:hidden;box-shadow:0 20px 50px rgba(90,47,23,.22);border:6px solid #2a170c;display:flex;flex-direction:column}
+.sc{display:none;flex:1;overflow-y:auto;padding:18px 16px 112px}.sc.on{display:block}.sc.removed{display:none!important}
+.tp{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.av{flex:none;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--gl),var(--go));color:var(--br);display:grid;place-items:center;font-weight:700}
+.tp small{display:block;color:var(--mu);font-size:12px}.tp b{font:700 17px "Playfair Display",Georgia,serif}
+.t{font:700 28px "Playfair Display",Georgia,serif;color:var(--br);line-height:1.1}
+.sb{color:var(--mu);margin:2px 0 14px}
+.cd{background:var(--cd);border-radius:22px;padding:14px;margin-bottom:12px;box-shadow:var(--sh)}
+.cd h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);margin-bottom:6px}
+.hero{position:relative;overflow:hidden;border-radius:26px;padding:18px;margin-bottom:12px;color:#F6E7C9;background:linear-gradient(145deg,#6B3A1E,#3B2111)}
+.hero:after{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:radial-gradient(var(--go),transparent 70%);opacity:.55}
+.hero small{opacity:.75}.hero .k{font:700 34px "Playfair Display",Georgia,serif;color:#fff;display:block;position:relative;z-index:1}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}.g .cd{margin:0}
+.k{font:700 22px "Playfair Display",Georgia,serif;color:var(--br)}
+.pl{display:inline-block;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:600;background:rgba(185,138,62,.18);color:var(--go)}
+.ok{background:rgba(79,138,75,.16);color:var(--ok)}.wn{background:rgba(210,118,43,.18);color:var(--wn)}
+.r{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--ln)}.r:last-child{border:0}
+.r>div{flex:1}.r small{display:block;color:var(--mu);font-size:12px}
+.ic{flex:none;width:38px;height:38px;border-radius:14px;background:rgba(185,138,62,.16);color:var(--go);display:grid;place-items:center;font-weight:700}
+.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bt{display:block;text-align:center;background:linear-gradient(135deg,var(--gl),var(--go));color:var(--br);border-radius:18px;padding:15px;font-weight:700;margin-top:6px;box-shadow:0 8px 18px rgba(185,138,62,.35)}
+.bt.o{background:var(--cd);box-shadow:none;border:1.5px solid var(--go);color:var(--go)}
+.sg{display:flex;background:var(--cd);border-radius:16px;padding:4px;margin-bottom:12px}
+.sg div{flex:1;text-align:center;padding:9px;border-radius:12px;color:var(--mu);font-weight:600}.sg .a{background:var(--br);color:var(--gl)}
+.se{background:var(--cd);border-radius:16px;padding:12px 14px;color:var(--mu);margin-bottom:12px;box-shadow:var(--sh)}
+.pg{height:6px;border-radius:4px;background:var(--ln);margin-top:5px;overflow:hidden}.pg i{display:block;height:100%;border-radius:4px;background:var(--go)}
+.qa{display:flex;justify-content:space-around;margin:4px 0 14px}.qa div{text-align:center;font-size:12px;font-weight:600;color:var(--mu)}
+.qa .ic{width:54px;height:54px;border-radius:50%;margin:0 auto 4px;background:var(--cd);box-shadow:var(--sh)}
+.tl{background:var(--cd);border-radius:22px;padding:14px;position:relative;box-shadow:var(--sh)}
+.tl b{display:block;font-size:17px;color:var(--br);margin:4px 0}.tl span{position:absolute;right:12px;top:12px;width:30px;height:30px;border-radius:50%;background:var(--go);color:var(--br);display:grid;place-items:center;font-weight:700}
+.tl.s{background:linear-gradient(145deg,var(--gl),var(--go));color:var(--br)}.tl.s h4{color:var(--br)}
+.fl{margin-bottom:10px}.fl small{color:var(--mu);font-size:12px}.fl div{background:var(--cd);border-radius:14px;padding:12px 14px;font-weight:600;margin-top:3px;box-shadow:var(--sh)}
+.cb{display:flex;align-items:center;justify-content:space-between;background:var(--br);color:#fff;border-radius:22px;padding:12px 12px 12px 18px;margin-top:12px}
+.cb em{font-style:normal;background:var(--gl);color:var(--br);padding:11px 16px;border-radius:16px;font-weight:700}
+.wk{display:flex;gap:8px;margin-bottom:12px}.wk div{flex:1;text-align:center;background:var(--cd);border-radius:16px;padding:8px 0;color:var(--mu);font-size:12px}.wk b{display:block;font-size:17px;color:var(--ink)}.wk .a{background:var(--br);color:var(--gl)}.wk .a b{color:#fff}
+.oc{border-left:5px solid var(--go)}
+.cl{display:flex;align-items:flex-end;gap:12px;height:100px}.cl div{flex:1;background:linear-gradient(var(--gl),var(--go));border-radius:10px;text-align:center;font-size:11px;color:var(--br);padding-top:3px;font-weight:700}
+.dn{display:flex;align-items:center;gap:16px}.dn i{flex:none;width:96px;height:96px;border-radius:50%;background:conic-gradient(var(--go) 0 60%,var(--br) 0 85%,var(--gl) 0);-webkit-mask:radial-gradient(circle 30px,transparent 98%,#000);mask:radial-gradient(circle 30px,transparent 98%,#000)}
+.nv{position:absolute;left:14px;right:14px;bottom:14px;height:64px;border-radius:32px;background:#2E1A0D;display:flex;align-items:center;justify-content:space-around;box-shadow:0 12px 28px rgba(0,0,0,.35)}
+.nv button{border:0;background:none;color:#B9A27F;font:600 10px inherit;display:grid;justify-items:center;gap:2px}.nv .on{color:var(--gl)}
+.nv .fab{width:56px;height:56px;border-radius:50%;margin-top:-26px;background:linear-gradient(135deg,var(--gl),var(--go));color:var(--br);box-shadow:0 8px 18px rgba(185,138,62,.5);border:4px solid var(--bg)}
+.pc{display:inline-block;border:1.5px solid var(--ln);border-radius:20px;padding:5px 12px;margin:0 4px 4px 0;font-size:12px;color:var(--mu)}.pc.a{background:var(--br);color:var(--gl);border-color:var(--br)}.tg{flex:none;width:42px;height:24px;border-radius:12px;background:var(--go);position:relative}.tg:after{content:"";position:absolute;right:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff}.r[onclick],.bt,em{cursor:pointer}
+.tg.off{background:var(--ln)}.tg.off:after{right:auto;left:3px}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="h" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="b" viewBox="0 0 24 24"><path d="M6 7h12l1 13H5zM9 7a3 3 0 0 1 6 0"/></symbol>
+<symbol id="k" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11"/></symbol>
+<symbol id="x" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8"/></symbol>
+<symbol id="g" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+<symbol id="p" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol></defs></svg>
+<div class="ct" id="ct"></div>
+<div class="ph">
+
+<div class="sc on"><div class="tp"><div class="av">MZ</div><div><small>Sex, 02 de outubro</small><b>Bom dia!</b></div></div>
+<div class="hero"><small>Lucro do mês</small><span class="k">R$ 1.612</span><span class="pl ok">+12%</span> <small>margem de 38%</small>
+<svg viewBox="0 0 120 40" style="width:100%;height:46px;margin-top:8px;position:relative;z-index:1"><polyline points="0,32 20,26 40,30 60,18 80,22 100,10 120,6" fill="none" stroke="#E8C98A" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+<div class="qa"><div><div class="ic"><svg class="i"><use href="#b"/></svg></div>Vender</div><div><div class="ic"><svg class="i"><use href="#x"/></svg></div>Produzir</div><div><div class="ic"><svg class="i"><use href="#p"/></svg></div>Comprar</div></div>
+<div class="g"><div class="cd"><h4>Vendas</h4><div class="k">R$ 4.280</div></div><div class="cd"><h4>Hoje</h4><div class="k">2</div><small>entregas</small></div></div>
+<div class="cd" style="margin-top:12px"><h4>Alertas</h4><div class="r"><div>Manteiga abaixo do mínimo</div><span class="pl wn">2 kg</span></div><div class="r"><div>Margem baixa: bolacha de nata</div><span class="pl wn">22%</span></div></div></div>
+
+<div class="sc"><div class="t">Estoque</div><div class="sb">Insumos e embalagens</div>
+<div class="se">Buscar item...</div><div class="sg"><div class="a">Insumos</div><div>Produtos</div></div>
+<div class="cd"><div class="r"><div class="ic">M</div><div>Manteiga<small>2,0 kg · mín 5</small><div class="pg"><i style="width:30%;background:var(--wn)"></i></div></div><span class="pl wn">baixo</span></div>
+<div class="r"><div class="ic">F</div><div>Farinha de trigo<small>12 kg</small><div class="pg"><i style="width:80%"></i></div></div><span class="pl ok">ok</span></div>
+<div class="r"><div class="ic">A</div><div>Açúcar<small>8 kg</small><div class="pg"><i style="width:65%"></i></div></div><span class="pl ok">ok</span></div>
+<div class="r"><div class="ic">O</div><div>Ovos<small>30 un</small><div class="pg"><i style="width:55%"></i></div></div><span class="pl ok">ok</span></div>
+<div class="r"><div class="ic">P</div><div>Pacote 300 g<small>85 un</small><div class="pg"><i style="width:90%"></i></div></div><span class="pl ok">ok</span></div></div>
+<a class="bt" onclick="go(16)">+ Entrada de compra</a></div>
+
+<div class="sc"><div class="t">Bolacha de Manteiga</div><div class="sb"><span class="pl">60 un</span> <span class="pl">1,2 kg</span> <span class="pl">35 min</span></div>
+<div class="hero"><small>Custo por bolacha</small><span class="k">R$ 0,64</span><small>lote: R$ 38,40 em ingredientes</small></div>
+<div class="cd"><h4>Ingredientes</h4><div class="r"><div>Manteiga<small>500 g</small></div><b>R$ 19,00</b></div><div class="r"><div>Farinha de trigo<small>600 g</small></div><b>R$ 3,60</b></div><div class="r"><div>Açúcar<small>200 g</small></div><b>R$ 1,40</b></div><div class="r"><div>Ovos<small>4 un</small></div><b>R$ 2,80</b></div><div class="r"><div>Outros<small>essência, sal</small></div><b>R$ 11,60</b></div></div>
+<a class="bt" onclick="go(3)">Precificar receita</a></div>
+
+<div class="sc"><div class="t">Precificação</div><div class="sb">Bolacha de Manteiga · custo do lote R$ 60,20</div>
+<div class="cd"><h4>Para onde vai o custo</h4><div style="display:flex;height:14px;border-radius:8px;overflow:hidden"><i style="width:64%;background:var(--br)"></i><i style="width:20%;background:var(--go)"></i><i style="width:7%;background:var(--gl)"></i><i style="width:9%;background:var(--ln)"></i></div>
+<small style="color:var(--mu)">Ingredientes 64% · Mão de obra 20% · Embalagem 7% · Outros 9%</small></div>
+<div class="cd"><h4>Margem desejada</h4><div class="k">40%</div><div style="height:8px;border-radius:6px;background:linear-gradient(90deg,var(--go) 40%,var(--ln) 40%);margin-top:8px"></div></div>
+<div class="g"><div class="tl s"><h4>150 g</h4><b>R$ 12,50</b>lucro R$ 4,97</div><div class="tl"><h4>300 g</h4><b>R$ 25,00</b><span class="pl ok" style="position:static">lucro R$ 9,95</span></div></div>
+<div class="cd" style="margin-top:12px"><h4>Simulador</h4>Se a manteiga subir 10%, a margem cai para <b>38%</b>.</div></div>
+
+<div class="sc"><div class="t">Novo lote</div><div class="sb">Registrar produção</div>
+<div class="fl"><small>Produto</small><div>Bolacha de Manteiga</div></div><div class="g"><div class="fl"><small>Fabricação</small><div>02/10/2026</div></div><div class="fl"><small>Validade</small><div>30/10/2026</div></div></div>
+<div class="fl"><small>Quantidade produzida</small><div>60 un</div></div>
+<div class="cd"><h4>Baixa automática de insumos</h4><div class="r"><div>Manteiga</div><b>−500 g</b></div><div class="r"><div>Farinha de trigo</div><b>−600 g</b></div><div class="r"><div>Açúcar</div><b>−200 g</b></div></div>
+<a class="bt">Salvar lote</a></div>
+
+<div class="sc"><div class="t">Vendas</div><div class="sb">Venda agora ou agende uma encomenda</div><div class="sg"><div class="a">Vender agora</div><div>Agendar encomenda</div></div><div class="cd"><h4>Pedido</h4><div class="fl"><small>Cliente obrigatório</small><div>Selecionar cliente</div></div><div class="fl"><small>Quantidade</small><div>1 pacote</div></div></div>
+<div class="g"><div class="tl"><span>+</span><h4>Manteiga</h4><b>150 g</b>R$ 12,50</div><div class="tl"><span>+</span><h4>Manteiga</h4><b>300 g</b>R$ 25,00</div><div class="tl"><span>+</span><h4>Milho</h4><b>150 g</b>R$ 12,50</div><div class="tl"><span>+</span><h4>Nata</h4><b>150 g</b>R$ 13,50</div></div>
+<div class="sg" style="margin-top:12px"><div class="a">Pix</div><div>Dinheiro</div><div>Cartão</div></div>
+<div class="cb"><div><small style="opacity:.7">3 itens</small><br><b style="font-size:18px">R$ 50,00</b></div><em onclick="go(18)">Finalizar</em></div></div>
+
+<div class="sc"><div class="t">Pedidos em andamento</div><div class="sb">Acompanhe produção e próximas entregas</div>
+<div class="wk"><div>Sex<b>2</b></div><div class="a">Sáb<b>3</b></div><div>Dom<b>4</b></div><div>Seg<b>5</b></div><div>Ter<b>6</b></div></div>
+<div class="cd oc"><div class="r"><div><b>Ana Souza</b><small>4× 300 g · sáb 03/10</small></div><span class="pl ok">Produzindo</span></div><span class="pl ok">Sinal pago</span></div>
+<div class="cd oc" style="border-color:var(--wn)"><div class="r"><div><b>Mercadinho Sol</b><small>20× 150 g · seg 05/10</small></div><span class="pl">Pedido</span></div><span class="pl wn">Sem sinal</span></div>
+<a class="bt" onclick="go(5)">Abrir Vendas</a></div>
+
+<div class="sc"><div class="t">Contatos</div><div class="sb">Clientes e fornecedores</div>
+<div class="sg"><div class="a">Clientes</div><div>Fornecedores</div></div>
+<div class="cd"><div class="r"><div class="ic">A</div><div>Ana Souza<small>última compra 28/09</small></div><span class="av" style="width:34px;height:34px;background:#25D366;color:#fff">✓</span></div><div class="r"><div class="ic">C</div><div>Carlos Lima<small>cliente</small></div><span class="pl">cliente</span></div><div class="r"><div class="ic">M</div><div>Mercadinho Sol<small>revenda</small></div></div></div>
+<div class="cd"><h4>Fornecedores</h4><div class="r"><div>Laticínios Serra<small>manteiga R$ 38/kg</small></div></div><div class="r"><div>Atacado Bom Preço<small>farinha, açúcar</small></div></div></div></div>
+
+<div class="sc"><div class="t">Financeiro</div><div class="sb">Outubro</div>
+<div class="hero"><small>Saldo</small><span class="k">R$ 2.940</span></div>
+<div class="g"><div class="cd"><h4>Entradas</h4><b style="color:var(--ok);font-size:18px">R$ 4.280</b></div><div class="cd"><h4>Saídas</h4><b style="color:var(--wn);font-size:18px">R$ 2.668</b></div></div>
+<div class="cd" style="margin-top:12px"><h4>Lançamentos</h4><div class="r"><div class="ic" style="color:var(--ok)">+</div><div>Venda Pix<small>hoje</small></div><b style="color:var(--ok)">R$ 62</b></div><div class="r"><div class="ic" style="color:var(--wn)">−</div><div>Compra de manteiga<small>ontem</small></div><b style="color:var(--wn)">R$ 190</b></div><div class="r"><div class="ic">!</div><div>Gás<small>vence 08/10</small></div><b>R$ 130</b></div></div></div>
+
+<div class="sc"><div class="t">Relatórios</div><div class="sb">Outubro</div>
+<div class="cd"><h4>Vendas por semana</h4><div class="cl"><div style="height:45%">S1</div><div style="height:70%">S2</div><div style="height:55%">S3</div><div style="height:92%">S4</div></div></div>
+<div class="cd"><h4>Lucro por produto</h4><div class="dn"><i></i><div><div class="r"><div>Manteiga</div><b>60%</b></div><div class="r"><div>Milho</div><b>25%</b></div><div class="r"><div>Nata</div><b>15%</b></div></div></div></div>
+<a class="bt o">Exportar PDF</a></div>
+
+<div class="sc"><div class="t">Mais</div><div class="sb">Tudo do seu negócio</div><div class="cd"><div class="r" onclick="go(8)"><div class="ic">$</div><div>Financeiro<small>entradas, saídas e contas</small></div></div><div class="r" onclick="go(9)"><div class="ic">%</div><div>Relatórios<small></small></div></div><div class="r" onclick="go(7)"><div class="ic">C</div><div>Clientes e fornecedores<small></small></div></div><div class="r" onclick="go(6)"><div class="ic">E</div><div>Encomendas<small></small></div></div><div class="r" onclick="go(4)"><div class="ic">L</div><div>Produção<small></small></div></div><div class="r" onclick="go(14)"><div class="ic">P</div><div>Produtos à venda<small></small></div></div><div class="r" onclick="go(15)"><div class="ic">⚙</div><div>Custos e configurações<small></small></div></div><div class="r" onclick="go(21)"><div class="ic">U</div><div>Conta, backup e usuários<small></small></div></div><div class="r" onclick="go(22)"><div class="ic">↻</div><div>Sincronização<small>Google Sheets</small></div></div></div></div><div class="sc"><div class="t">Novo insumo</div><div class="sb">Cadastro</div><div class="fl"><small>Nome</small><div>Manteiga sem sal</div></div><div class="g"><div class="fl"><small>Unidade de compra</small><div>kg</div></div><div class="fl"><small>Preço pago</small><div>R$ 38,00</div></div></div><div class="fl"><small>Fornecedor</small><div>Laticínios Serra</div></div><div class="fl"><small>Estoque mínimo</small><div>5 kg</div></div><small style="color:var(--mu)">Alérgenos</small><div style="margin:4px 0 8px"><span class="pc a">Leite</span><span class="pc">Glúten</span><span class="pc">Ovos</span><span class="pc">Soja</span></div><a class="bt">Salvar insumo</a></div><div class="sc"><div class="t">Receitas</div><div class="sb">Suas fichas técnicas</div><div class="cd"><div class="r" onclick="go(13)"><div class="ic">M</div><div>Bolacha de Manteiga<small>60 un · R$ 0,64 cada</small></div><span class="pl ok">margem 40%</span></div><div class="r"><div class="ic">M</div><div>Bolacha de Milho<small>rascunho</small></div><span class="pl">novo</span></div><div class="r"><div class="ic">N</div><div>Bolacha de Nata<small>60 un · R$ 0,81 cada</small></div><span class="pl wn">margem 22%</span></div></div><a class="bt">+ Nova receita</a></div><div class="sc"><div class="t">Editar receita</div><div class="sb">Bolacha de Manteiga</div><div class="fl"><small>Nome</small><div>Bolacha de Manteiga</div></div><div class="g"><div class="fl"><small>Rendimento</small><div>60 un</div></div><div class="fl"><small>Perda/quebra</small><div>3%</div></div></div><div class="cd"><h4>Ingredientes</h4><div class="r"><div>Manteiga</div><b>500 g</b></div><div class="r"><div>Farinha de trigo</div><b>600 g</b></div><div class="r"><div>Açúcar</div><b>200 g</b></div></div><a class="bt o">+ Adicionar ingrediente</a><div class="fl"><small>Modo de preparo</small><div>Misturar, modelar e assar a 180 °C...</div></div><a class="bt">Salvar receita</a></div><div class="sc"><div class="t">Produto à venda</div><div class="sb">Liga a receita às embalagens</div><div class="fl"><small>Produto</small><div>Bolacha de Manteiga</div></div><div class="fl"><small>Receita</small><div>Bolacha de Manteiga · 60 un</div></div><div class="cd"><h4>Embalagens e preços</h4><div class="r"><div>Pacote 150 g<small>rende 8 pacotes</small></div><b>R$ 12,50</b></div><div class="r"><div>Pacote 300 g<small>rende 4 pacotes</small></div><b>R$ 25,00</b></div></div><a class="bt o">+ Embalagem</a><a class="bt">Salvar produto</a></div><div class="sc"><div class="t">Custos</div><div class="sb">Base da precificação</div><div class="g"><div class="fl"><small>Hora de trabalho</small><div>R$ 20,00</div></div><div class="fl"><small>Gás e energia/lote</small><div>R$ 3,50</div></div><div class="fl"><small>Taxa Pix</small><div>0%</div></div><div class="fl"><small>Taxa cartão</small><div>3,5%</div></div></div><div class="fl"><small>Margem padrão</small><div>40%</div></div><div class="fl"><small>Chave Pix</small><div>(54) 9 8423-7366</div></div><div class="cd"><div class="r"><div>Alertar margem baixa<small>quando um insumo encarecer</small></div><i class="tg"></i></div></div><a class="bt">Salvar configurações</a></div><div class="sc"><div class="t">Compra de insumo</div><div class="sb">Entrada no estoque</div><div class="fl"><small>Fornecedor</small><div>Laticínios Serra</div></div><div class="g"><div class="fl"><small>Item</small><div>Manteiga</div></div><div class="fl"><small>Quantidade</small><div>5 kg</div></div></div><div class="fl"><small>Valor total</small><div>R$ 190,00 (R$ 38,00/kg)</div></div><div class="fl"><small>Pagamento</small><div>Pix · hoje</div></div><div class="cd"><h4>Depois de salvar</h4>Estoque de manteiga: 2 kg → <b>7 kg</b><br>Custo médio atualizado e receitas recalculadas.</div><a class="bt">Salvar compra</a></div><div class="sc"><div class="t">Nova encomenda</div><div class="sb">Pedido do cliente</div><div class="fl"><small>Cliente</small><div>Ana Souza</div></div><div class="cd"><h4>Itens</h4><div class="r"><div>4× Manteiga 300 g</div><b>R$ 100,00</b></div></div><a class="bt o">+ Adicionar item</a><div class="g" style="margin-top:10px"><div class="fl"><small>Entrega</small><div>sáb 03/10 · 10h</div></div><div class="fl"><small>Sinal</small><div>R$ 50,00 · Pix</div></div></div><div class="cd"><div class="r"><div>Total</div><b>R$ 100,00</b></div><div class="r"><div>Falta receber</div><b>R$ 50,00</b></div></div><a class="bt">Salvar encomenda</a></div><div class="sc"><div class="hero" style="text-align:center"><small>Venda concluída</small><span class="k">R$ 50,00</span><span class="pl ok">Pix</span></div><div class="cd"><h4>Itens</h4><div class="r"><div>2× Manteiga 150 g</div><b>R$ 25,00</b></div><div class="r"><div>1× Manteiga 300 g</div><b>R$ 25,00</b></div><div class="r"><div>Lucro estimado</div><b style="color:var(--ok)">R$ 19,90</b></div></div><a class="bt">Compartilhar no WhatsApp</a><a class="bt o" onclick="go(5)">Nova venda</a></div><div class="sc"><div class="tp"><div class="av" style="width:56px;height:56px;font-size:20px">A</div><div><b style="font-size:22px">Ana Souza</b><small>cliente desde set/2026</small></div></div><div class="g"><div class="cd"><h4>Comprou</h4><div class="k">R$ 420</div></div><div class="cd"><h4>Compras</h4><div class="k">7</div></div></div><div class="cd" style="margin-top:12px"><h4>Histórico</h4><div class="r"><div>28/09<small>2× 300 g</small></div><b>R$ 62</b></div><div class="r"><div>14/09<small>4× 150 g</small></div><b>R$ 50</b></div></div><div class="cd"><h4>Observações</h4>Aniversário 12/11 · prefere pacote de 300 g</div><a class="bt">Chamar no WhatsApp</a><a class="bt o" onclick="go(17)">Nova encomenda</a></div><div class="sc"><div class="t">Novo lançamento</div><div class="sb">Financeiro</div><div class="sg"><div>Entrada</div><div class="a">Saída</div><div>A pagar</div></div><div class="cd" style="text-align:center"><h4>Valor</h4><div class="k" style="font-size:34px">R$ 130,00</div></div><div class="fl"><small>Categoria</small><div>Gás</div></div><div class="fl"><small>Data</small><div>08/10/2026</div></div><div class="cd"><div class="r"><div>Gasto do negócio<small>desligue para gasto pessoal</small></div><i class="tg"></i></div></div><a class="bt">Salvar lançamento</a></div><div class="sc"><div class="hero" style="text-align:center"><small>Bem-vindo ao</small><span class="k">MZ Gestão</span><small>Amanteigadas que Derretem na Boca</small></div><div class="fl"><small>Seu nome</small><div></div></div><div class="sg"><div class="a">Só neste aparelho</div><div>Sincronizar</div></div><div class="cd"><h4>Usuários</h4><div class="r"><div>Você<small>administrador</small></div></div><div class="r"><div>Convidar parceiro(a)<small>compartilha os mesmos dados</small></div><span class="pl">+</span></div></div><div class="cd"><h4>Backup</h4>Último backup: nunca</div><a class="bt">Começar</a><a class="bt o">Fazer backup agora</a></div>
+<div class="sc"><div class="t">Sincronização</div><div class="sb">Espelho no Google Sheets</div>
+<div class="hero"><small>Situação</small><span class="k">Em dia</span><span class="pl ok">Conectado</span> <small>última sincronização hoje, 09:42</small></div>
+<div class="cd"><h4>Conta Google</h4><div class="r"><div class="av" style="width:36px;height:36px">G</div><div>voce@gmail.com<small>planilha: MZ Gestão - Dados</small></div></div><a class="bt o">Desconectar</a></div>
+<div class="cd"><h4>Fila</h4><div class="r"><div>Aguardando envio</div><b>3</b></div><div class="r"><div>Recebido da planilha</div><b>2</b></div><div class="r"><div>Com erro</div><span class="pl wn">1 linha</span></div></div>
+<div class="cd oc" style="border-color:var(--wn)"><h4>Revisar</h4>insumo · linha 14: preço inválido<a class="bt o">Revisar linha</a></div>
+<div class="cd"><div class="r"><div>Sincronizar automaticamente<small>ao salvar e ao abrir o app</small></div><i class="tg"></i></div><div class="r"><div>Somente no Wi-Fi</div><i class="tg off"></i></div></div>
+<div class="cd"><h4>Aparelhos</h4><div class="r"><div>Este aparelho<small>agora</small></div><span class="pl ok">ativo</span></div><div class="r"><div>Aparelho do parceiro(a)<small>há 2 h</small></div></div></div>
+<a class="bt">Sincronizar agora</a><a class="bt o">Abrir planilha no Drive</a></div>
+<div class="nv"><button onclick="go(0)"><svg class="i"><use href="#h"/></svg>Início</button><button onclick="go(2)"><svg class="i"><use href="#k"/></svg>Receitas</button><button class="fab" onclick="go(5)"><svg class="i" style="width:26px;height:26px"><use href="#p"/></svg></button><button onclick="go(1)"><svg class="i"><use href="#x"/></svg>Estoque</button><button onclick="go(10)"><svg class="i"><use href="#g"/></svg>Mais</button></div>
+</div>
+<script>
+const N=["Início","Estoque","Receita","Preço","Produção","Vender","Encomendas","Contatos","Financeiro","Relatórios","Menu","Novo insumo","Receitas","Editar receita","Produto","Custos","Compra","Nova encomenda","Comprovante","Cliente","Lançamento","Primeiro acesso","Sincronização"],S=[...document.querySelectorAll(".sc")],ct=document.getElementById("ct");
+S[17].classList.add("removed");
+S[6].innerHTML='<div class="t">Gestão de pedidos</div><div class="sb">Acompanhe os pedidos agendados e seus pagamentos</div><div class="wk"><div>Sex<b>2</b></div><div class="a">Sáb<b>3</b></div><div>Dom<b>4</b></div><div>Seg<b>5</b></div><div>Ter<b>6</b></div></div><div class="cd oc"><div class="r"><div><b>Ana Souza</b><small>4× 300 g · sáb 03/10</small></div><span class="pl">Pedido realizado</span></div><span class="pl wn">Aguardando pagamento</span><a class="bt">Marcar como pago</a></div><div class="cd oc" style="border-color:var(--ok)"><div class="r"><div><b>Mercadinho Sol</b><small>20× 150 g · seg 05/10</small></div><span class="pl ok">Pago</span></div><span class="pl ok">Pagamento confirmado</span></div>';
+N.forEach((n,i)=>{if(i===17)return;const b=document.createElement("button");b.className="ch";b.textContent=i===6?"Gestão de pedidos":n;b.onclick=()=>go(i);ct.appendChild(b)});
+function go(i){S.forEach((s,j)=>{s.classList.toggle("on",i==j);if(i==j)s.scrollTop=0});[...ct.children].forEach((c,j)=>c.classList.toggle("on",i==j))}
+go(0)
+</script></body></html>
