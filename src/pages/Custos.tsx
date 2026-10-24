@@ -6,7 +6,7 @@ import { AlertaConclusao, Campo } from './ui'
 
 const CAMPOS: [string, string, string][] = [
   ['hora_trabalho', 'Valor da hora de trabalho (R$)', '20'],
-  ['gas_lote', 'Gás e energia por lote (R$)', '3.5'],
+  ['gas_lote', 'Gás e energia por receita (R$)', '3.5'],
   ['taxa_pix', 'Taxa do Pix (%)', '0'],
   ['taxa_cartao', 'Taxa do cartão (%)', '3.5'],
   ['margem_padrao', 'Margem padrão (%)', '40'],

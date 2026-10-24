@@ -17,9 +17,9 @@ const ICONOS = {
   edit: <><path d="m4 16-.8 4.8L8 20l11-11-4-4zM13.5 6.5l4 4" /></>,
   trash: <><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" /></>,
   cart: <><path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 9H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
-  backup: <><path d="M12 3v12M7 10l5 5 5-5M4 20h16" /></>,
   arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   check: <><path d="m5 12 4 4L19 6" /></>,
+  close: <><path d="m6 6 12 12M18 6 6 18" /></>,
 } as const
 
 export function Icon({ name, size = 20 }: { name: keyof typeof ICONOS; size?: number }) {
@@ -28,6 +28,10 @@ export function Icon({ name, size = 20 }: { name: keyof typeof ICONOS; size?: nu
       {ICONOS[name]}
     </svg>
   )
+}
+
+export function FecharModal({ onClick }: { onClick: () => void }) {
+  return <button className="add-dialog-close" type="button" aria-label="Fechar modal" onClick={onClick}><Icon name="close" size={18} /></button>
 }
 
 export function focarCampo(id: string) {
@@ -59,6 +63,7 @@ export function ConfirmacaoAcao({
   return (
     <div className="alert-overlay">
       <section className="alert-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+        <FecharModal onClick={onCancelar} />
         <span className={`alert-icon${perigosa ? ' danger' : ''}`}><Icon name={perigosa ? 'trash' : 'check'} size={26} /></span>
         <h2 id="confirm-title">{titulo}</h2>
         <p id="confirm-message">{mensagem}</p>

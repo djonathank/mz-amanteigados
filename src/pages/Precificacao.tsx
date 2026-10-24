@@ -7,14 +7,12 @@ import { formatBRL } from '../domain/money'
 import { profit, realMargin, suggestedPrice, unitCost } from '../domain/pricing'
 import { Campo, Selecao } from './ui'
 
-const FORMAS_PAGAMENTO: [string, string][] = [['pix', 'Pix'], ['cartao', 'Cartão'], ['dinheiro', 'Dinheiro']]
-
 export default function Precificacao() {
   const db = useDb()
   const [search] = useSearchParams()
   const [base, setBase] = useState<Base | null>(null)
   const [varianteId, setVarianteId] = useState('')
-  const [lote, setLote] = useState(Number(search.get('lote')) || 60.2)
+  const [custoReceita, setCustoReceita] = useState(Number(search.get('lote')) || 60.2)
   const [pacotes, setPacotes] = useState(Number(search.get('pacotes')) || 8)
   const [margem, setMargem] = useState(40)
   const [formaPagamento, setFormaPagamento] = useState<'pix' | 'cartao' | 'dinheiro'>('pix')
@@ -56,8 +54,8 @@ export default function Precificacao() {
   try {
     custoPacote = variante && base
       ? custoDaVariante(variante, base)
-      : base && Number.isFinite(lote) && Number.isFinite(pacotes) && pacotes > 0
-        ? unitCost(Math.round(lote * 100), pacotes)
+      : base && Number.isFinite(custoReceita) && Number.isFinite(pacotes) && pacotes > 0
+        ? unitCost(Math.round(custoReceita * 100), pacotes)
         : 0
   } catch (e) {
     calculoErro = e instanceof Error ? e.message : String(e)
@@ -148,7 +146,7 @@ export default function Precificacao() {
             id="preco.variante"
             valor={varianteId}
             onChange={(id) => { setVarianteId(id); setAviso('') }}
-            opcoes={[['manual', 'Informar custo do lote'], ...base.variantes.map((item) => [item.id, `${item.produto_nome} · ${item.nome}`] as [string, string])]}
+            opcoes={[['manual', 'Informar custo da receita'], ...base.variantes.map((item) => [item.id, `${item.produto_nome} · ${item.nome}`] as [string, string])]}
           />
           {receita && <p className="helper">Receita: {receita.nome} · custo inclui ingredientes, tempo de preparo, gás, embalagem e rótulo.</p>}
         </div>
@@ -168,8 +166,8 @@ export default function Precificacao() {
         <h2>Simular preço</h2>
         {!variante && (
           <>
-            {campo('Custo do lote (R$)', lote, setLote, 'custo-lote', 'dinheiro')}
-            {campo('Pacotes que o lote rende', pacotes, setPacotes, 'pacotes', 'inteiro')}
+            {campo('Custo total da receita (R$)', custoReceita, setCustoReceita, 'custo-receita', 'dinheiro')}
+            {campo('Pacotes por receita', pacotes, setPacotes, 'pacotes', 'inteiro')}
           </>
         )}
         <div className="g">
@@ -187,8 +185,17 @@ export default function Precificacao() {
         <p className="helper">
           A margem inicial vem de Custos e configurações. A taxa considera a tarifa do meio de pagamento selecionado; dinheiro não tem taxa.
         </p>
+        {variante && <>
+          {campo('Aumento simulado de cada insumo (%)', aumento, setAumento, 'aumento-insumo')}
+          <p className="helper">Veja como o custo e o preço sugerido mudariam se cada insumo usado nesta receita subir esse percentual.</p>
+          {simulacao.erro && <p className="notice error" role="alert">{simulacao.erro}</p>}
+          {simulacoes.map(({ insumo, custoNovo, precoNovo, delta }) => <div className="r" key={insumo.id}>
+            <span>{insumo.nome}<small>Custo do pacote {formatBRL(custoPacote)} → {formatBRL(custoNovo)} ({delta >= 0 ? '+' : ''}{formatBRL(delta)})</small></span>
+            <b>{formatBRL(precoNovo)}</b>
+          </div>)}
+        </>}
         {variante && valido && <button className="bt" data-testid="preco.salvar" onClick={salvarPreco}>Salvar preço no produto</button>}
-        {base?.variantes.length === 0 && <p className="notice">Cadastre uma receita e um produto para calcular o custo automaticamente. Enquanto isso, informe o custo do lote acima.</p>}
+        {base?.variantes.length === 0 && <p className="notice">Cadastre uma receita e um produto para calcular o custo automaticamente. Enquanto isso, informe o custo total da receita acima.</p>}
       </div>
     </>
   )

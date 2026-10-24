@@ -12,7 +12,6 @@ interface Resumo {
   receitas: number
   produtos: number
   insumos: number
-  itensExemplo: number
   nomeUsuario: string
 }
 
@@ -31,7 +30,7 @@ export default function Inicio() {
     let ativo = true
     const carregar = async () => {
       try {
-        const [vendas, lucro, vendasHoje, receitas, produtos, insumos, exemplos, usuario] = await Promise.all([
+        const [vendas, lucro, vendasHoje, receitas, produtos, insumos, usuario] = await Promise.all([
           db.query<{ total: number }>(
             'SELECT COALESCE(SUM(total_cents), 0) AS total FROM venda WHERE deleted_at IS NULL AND data >= ? AND data < ?',
             [inicioMes, fimMes],
@@ -49,12 +48,6 @@ export default function Inicio() {
           db.query<{ total: number }>('SELECT COUNT(*) AS total FROM receita WHERE deleted_at IS NULL'),
           db.query<{ total: number }>('SELECT COUNT(*) AS total FROM produto WHERE deleted_at IS NULL'),
           db.query<{ total: number }>('SELECT COUNT(*) AS total FROM insumo WHERE deleted_at IS NULL'),
-          db.query<{ total: number }>(
-            `SELECT
-              (SELECT COUNT(*) FROM insumo WHERE deleted_at IS NULL AND nome LIKE '%(exemplo)%') +
-              (SELECT COUNT(*) FROM receita WHERE deleted_at IS NULL AND nome LIKE '%(exemplo)%') +
-              (SELECT COUNT(*) FROM produto WHERE deleted_at IS NULL AND nome LIKE '%(exemplo)%') AS total`,
-          ),
           db.query<{ valor: string }>('SELECT valor FROM config WHERE chave=?', ['nome_usuario']),
         ])
         if (!ativo) return
@@ -65,7 +58,6 @@ export default function Inicio() {
           receitas: receitas[0]?.total ?? 0,
           produtos: produtos[0]?.total ?? 0,
           insumos: insumos[0]?.total ?? 0,
-          itensExemplo: exemplos[0]?.total ?? 0,
           nomeUsuario: usuario[0]?.valor ?? '',
         })
         setErro('')
@@ -77,8 +69,6 @@ export default function Inicio() {
     return () => { ativo = false }
   }, [db, inicioHoje, fimHoje, inicioMes, fimMes])
 
-  const mesNome = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-
   return (
     <>
       <header className="home-header">
@@ -86,7 +76,7 @@ export default function Inicio() {
           <img className="home-avatar" src={carregarAvatar()} alt="" />
         </Link>
         <div><small>{agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</small><h1>{saudacao}</h1>
-         <p className="sb">{resumo?.nomeUsuario} </p>
+         <p className="sb">{resumo?.nomeUsuario ? `Olá, ${resumo.nomeUsuario}` : 'Sua gestão, em um só lugar'}</p>
         </div>
        
       </header>
@@ -94,7 +84,6 @@ export default function Inicio() {
       {erro && <p className="notice error" role="alert">Não foi possível carregar o resumo: {erro}</p>}
       {!resumo ? <p className="notice" role="status">Carregando o resumo...</p> : (
         <>
-          {/* {resumo.itensExemplo > 0 && <p className="notice">Catálogo demonstrativo: os cadastros com “(exemplo)” são dados de teste e podem ser excluídos.</p>} */}
           <section className="hero" aria-label="Faturamento no mês">
             <small>Faturamento no mês</small>
             <b>{formatBRL(resumo.faturamentoMes)}</b>

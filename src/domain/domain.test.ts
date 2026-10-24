@@ -71,8 +71,9 @@ describe('precificação (teste de ouro da documentação)', () => {
 
 describe('encomendas', () => {
   it('respeita a máquina de estados', () => {
-    expect(canTransition('pedido', 'produzindo')).toBe(true)
-    expect(canTransition('pedido', 'entregue')).toBe(false)
-    expect(canTransition('entregue', 'cancelado')).toBe(false)
+    expect(canTransition('agendado', 'finalizado')).toBe(true)
+    expect(canTransition('agendado', 'cancelado')).toBe(true)
+    expect(canTransition('agendado', 'agendado')).toBe(false)
+    expect(canTransition('finalizado', 'cancelado')).toBe(false)
   })
 })

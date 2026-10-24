@@ -1,6 +1,7 @@
 import { canTransition, type OrderStatus } from '../domain/orders'
 import type { Db } from './db'
 import { novoId, registrarVenda } from './repos'
+import { carregarBase, custoDaVariante } from './calculos'
 
 const agora = () => new Date().toISOString()
 
@@ -16,6 +17,7 @@ export interface FornecedorRow {
 export interface EncomendaRow {
   id: string; cliente_id: string | null; cliente_nome: string | null; data_entrega: string
   status: OrderStatus; sinal_cents: number; total_cents: number; observacoes: string | null
+  origem: 'agendada' | 'agora'
 }
 
 export interface EncomendaItemRow {
@@ -37,6 +39,8 @@ export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id
   const id = input.id ?? novoId()
   const t = agora()
   if (input.id) {
+    const [current] = await db.query<{ id: string }>('SELECT id FROM cliente WHERE id=? AND deleted_at IS NULL', [id])
+    if (!current) throw new Error('O cliente que você está editando não foi encontrado.')
     await db.run(
       'UPDATE cliente SET nome=?, whatsapp=?, endereco=?, aniversario=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
       [input.nome.trim(), input.whatsapp || null, input.endereco || null, input.aniversario || null, input.observacoes || null, t, id],
@@ -68,6 +72,8 @@ export async function salvarFornecedor(db: Db, input: Omit<FornecedorRow, 'id'> 
   const id = input.id ?? novoId()
   const t = agora()
   if (input.id) {
+    const [current] = await db.query<{ id: string }>('SELECT id FROM fornecedor WHERE id=? AND deleted_at IS NULL', [id])
+    if (!current) throw new Error('O fornecedor que você está editando não foi encontrado.')
     await db.run('UPDATE fornecedor SET nome=?, contato=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
       [input.nome.trim(), input.contato || null, input.observacoes || null, t, id])
   } else {
@@ -85,9 +91,19 @@ export async function excluirFornecedor(db: Db, id: string) {
 
 export const listarEncomendas = (db: Db) =>
   db.query<EncomendaRow>(
-    `SELECT e.id, e.cliente_id, c.nome AS cliente_nome, e.data_entrega, e.status, e.sinal_cents, e.total_cents, e.observacoes
+    `SELECT e.id, e.cliente_id, c.nome AS cliente_nome, e.data_entrega,
+            CASE WHEN e.status='cancelado' THEN 'cancelado'
+                 WHEN e.status IN ('entregue','pago') THEN 'finalizado'
+                 ELSE 'agendado' END AS status,
+            e.sinal_cents, e.total_cents, e.observacoes, 'agendada' AS origem
      FROM encomenda e LEFT JOIN cliente c ON c.id=e.cliente_id
-     WHERE e.deleted_at IS NULL ORDER BY e.data_entrega, e.created_at`,
+     WHERE e.deleted_at IS NULL
+     UNION ALL
+     SELECT v.id, v.cliente_id, c.nome AS cliente_nome, v.data AS data_entrega,
+            'finalizado' AS status, 0 AS sinal_cents, v.total_cents, NULL AS observacoes, 'agora' AS origem
+     FROM venda v LEFT JOIN cliente c ON c.id=v.cliente_id
+     WHERE v.deleted_at IS NULL AND v.encomenda_id IS NULL
+     ORDER BY data_entrega`,
   )
 
 export const listarItensEncomenda = (db: Db, encomendaId: string) =>
@@ -116,9 +132,9 @@ export async function salvarEncomenda(db: Db, input: {
   const t = agora()
   await db.transaction(async () => {
     if (input.id) {
-      const [current] = await db.query<{ status: OrderStatus }>('SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [id])
+      const [current] = await db.query<{ status: string }>('SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [id])
       if (!current) throw new Error('A encomenda não foi encontrada.')
-      if (current.status === 'pago' || current.status === 'entregue' || current.status === 'cancelado') throw new Error('Pedidos pagos ou cancelados não podem ser editados.')
+      if (current.status !== 'pedido') throw new Error('Pedidos finalizados ou cancelados não podem ser editados.')
       await db.run(
         'UPDATE encomenda SET cliente_id=?, data_entrega=?, sinal_cents=?, total_cents=?, observacoes=?, updated_at=? WHERE id=?',
         [input.clienteId || null, input.dataEntrega, input.sinalCents, total, input.observacoes || null, t, id],
@@ -173,10 +189,13 @@ async function criarLancamento(db: Db, input: {
 export async function alterarStatusEncomenda(db: Db, id: string, status: OrderStatus) {
   const t = agora()
   await db.transaction(async () => {
-    const [current] = await db.query<{ status: OrderStatus }>('SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [id])
+    const [current] = await db.query<{ status: string }>('SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [id])
     if (!current) throw new Error('A encomenda não foi encontrada.')
-    if (!canTransition(current.status, status)) throw new Error(`Não é permitido alterar encomenda de "${current.status}" para "${status}".`)
-    await db.run('UPDATE encomenda SET status=?, updated_at=? WHERE id=?', [status, t, id])
+    const currentStatus: OrderStatus = current.status === 'cancelado'
+      ? 'cancelado'
+      : ['pago', 'entregue'].includes(current.status) ? 'finalizado' : 'agendado'
+    if (!canTransition(currentStatus, status)) throw new Error(`Não é permitido alterar pedido de "${currentStatus}" para "${status}".`)
+    await db.run('UPDATE encomenda SET status=?, updated_at=? WHERE id=?', [status === 'finalizado' ? 'entregue' : status, t, id])
     if (status === 'cancelado') {
       await db.run('UPDATE lancamento SET deleted_at=?, updated_at=? WHERE origem_tipo=? AND origem_id=? AND pago=0 AND deleted_at IS NULL',
         [t, t, 'encomenda', id])
@@ -187,35 +206,34 @@ export async function alterarStatusEncomenda(db: Db, id: string, status: OrderSt
 export async function entregarEncomenda(db: Db, input: {
   encomendaId: string; forma: string; motivoEstoqueNegativo?: string
 }) {
-  const [order] = await db.query<{ status: OrderStatus; sinal_cents: number; total_cents: number; cliente_id: string | null }>(
+  const [order] = await db.query<{ status: string; sinal_cents: number; total_cents: number; cliente_id: string | null }>(
     'SELECT status, sinal_cents, total_cents, cliente_id FROM encomenda WHERE id=? AND deleted_at IS NULL', [input.encomendaId],
   )
-  if (!order || order.status !== 'pronto') throw new Error('A encomenda precisa estar pronta antes da entrega.')
+  if (!order || order.status !== 'pedido') throw new Error('Este pedido não está mais agendado.')
   const items = await db.query<{ variante_id: string; quantidade: number; preco_unit_cents: number }>(
     'SELECT variante_id, quantidade, preco_unit_cents FROM encomenda_item WHERE encomenda_id=? AND deleted_at IS NULL',
     [input.encomendaId],
   )
+  const base = await carregarBase(db)
   return registrarVenda(db, {
     forma: input.forma,
     clienteId: order.cliente_id,
     encomendaId: input.encomendaId,
     descontoCents: order.sinal_cents,
     motivoEstoqueNegativo: input.motivoEstoqueNegativo,
-    itens: await Promise.all(items.map(async (item) => {
-      const [cost] = await db.query<{ custo_unit: number }>(
-        `SELECT custo_unit FROM movimento_estoque WHERE item_tipo='variante' AND item_id=? AND tipo='producao'
-         ORDER BY data DESC LIMIT 1`, [item.variante_id],
-      )
+    itens: items.map((item) => {
+      const variant = base.variantes.find((row) => row.id === item.variante_id)
+      if (!variant) throw new Error('Um produto deste pedido não foi encontrado.')
       return {
         varianteId: item.variante_id, quantidade: item.quantidade, precoCents: item.preco_unit_cents,
-        custoCents: Number(cost?.custo_unit ?? 0),
+        custoCents: custoDaVariante(variant, base),
       }
-    })),
+    }),
   }, async (_saleId, t) => {
-    const [current] = await db.query<{ status: OrderStatus }>(
+    const [current] = await db.query<{ status: string }>(
       'SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [input.encomendaId],
     )
-    if (!current || current.status !== 'pronto') throw new Error('A encomenda deixou de estar pronta e não pode ser entregue.')
+    if (!current || current.status !== 'pedido') throw new Error('Este pedido não está mais agendado e não pode ser finalizado.')
     await db.run('UPDATE encomenda SET status=?, updated_at=? WHERE id=?', ['entregue', t, input.encomendaId])
     await db.run('UPDATE lancamento SET deleted_at=?, updated_at=? WHERE origem_tipo=? AND origem_id=? AND pago=0 AND deleted_at IS NULL',
       [t, t, 'encomenda', input.encomendaId])
@@ -237,6 +255,11 @@ export async function salvarLancamento(db: Db, input: {
   }
   const t = agora()
   if (input.id) {
+    const [current] = await db.query<{ id: string; origem_tipo: string | null }>(
+      'SELECT id, origem_tipo FROM lancamento WHERE id=? AND deleted_at IS NULL', [input.id],
+    )
+    if (!current) throw new Error('O lançamento que você está editando não foi encontrado.')
+    if (current.origem_tipo !== null) throw new Error('Este lançamento é vinculado a uma compra, venda ou encomenda e não pode ser editado aqui.')
     await db.run(
       `UPDATE lancamento SET tipo=?, categoria=?, valor_cents=?, data=?, vencimento=?, pago=?, negocio=?, updated_at=?
        WHERE id=? AND deleted_at IS NULL AND origem_tipo IS NULL`,

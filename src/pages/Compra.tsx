@@ -1,23 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
 import { listarInsumos, registrarCompra, type InsumoRow } from '../data/repos'
-import { listarNecessidadesEncomendas } from '../data/phase2'
 import { baseOf, type Unit } from '../domain/units'
 import { listarFornecedores, type FornecedorRow } from '../data/phase3'
-import { AlertaConclusao, Campo, Selecao } from './ui'
+import { AlertaConclusao, Campo, FecharModal, Selecao } from './ui'
 
 const UNIDADES: [string, string][] = ['kg', 'g', 'l', 'ml', 'un'].map((u) => [u, u])
 
-interface Faltante {
-  receita: string; insumo: string; unidade: string; necessario: number; disponivel: number; faltante: number
-}
-
 export default function Compra() {
   const db = useDb()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [insumos, setInsumos] = useState<InsumoRow[]>([])
   const [fornecedores, setFornecedores] = useState<FornecedorRow[]>([])
-  const [necessidades, setNecessidades] = useState<Faltante[]>([])
   const [sel, setSel] = useState('')
   const [qtd, setQtd] = useState('')
   const [un, setUn] = useState('')
@@ -28,13 +24,13 @@ export default function Compra() {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [carregando, setCarregando] = useState(true)
+  const [formAberto, setFormAberto] = useState(false)
   useEffect(() => {
     let ativo = true
-    void Promise.all([listarInsumos(db), listarFornecedores(db), listarNecessidadesEncomendas(db)]).then(([lista, supplierRows, shortages]) => {
+    void Promise.all([listarInsumos(db), listarFornecedores(db)]).then(([lista, supplierRows]) => {
       if (!ativo) return
       setInsumos(lista)
       setFornecedores(supplierRows)
-      setNecessidades(shortages)
     }).catch((e) => {
       if (ativo) setErro(e instanceof Error ? e.message : String(e))
     }).finally(() => {
@@ -42,6 +38,12 @@ export default function Compra() {
     })
     return () => { ativo = false }
   }, [db])
+  useEffect(() => { setFormAberto(location.hash === '#compra-form') }, [location.hash])
+
+  const fecharFormulario = () => {
+    setFormAberto(false)
+    if (location.hash === '#compra-form') navigate(`${location.pathname}${location.search}`, { replace: true })
+  }
 
   const insumo = insumos.find((i) => i.id === sel)
   const compativel = !!insumo && !!un && baseOf(un as Unit) === insumo.unidade_base
@@ -62,6 +64,7 @@ export default function Compra() {
       setTotal('')
       setFornecedor('')
       setPago('1')
+      fecharFormulario()
       setConfirmacao('Compra registrada. O saldo, custo médio, histórico de preços e financeiro foram atualizados.')
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
@@ -77,21 +80,11 @@ export default function Compra() {
       <h1>Compras</h1>
       <p className="sb">A compra atualiza o estoque e o custo médio ponderado do insumo.</p>
       {erro && <p className="notice error" role="alert">{erro}</p>}
-      <div className="cd">
-        <div className="section-heading"><h2>O que comprar</h2><span className="pl">{necessidades.length} itens</span></div>
-        {necessidades.length === 0
-          ? <p className="notice">O estoque atual cobre as encomendas abertas, ou ainda não há encomendas.</p>
-          : <>
-            <p className="sb">Necessidades calculadas a partir das encomendas abertas e do estoque atual.</p>
-            {necessidades.map((item) => <div className="r" key={`${item.receita}-${item.insumo}`}>
-              <span><b>{item.insumo}</b><small>Receita: {item.receita} · necessário {item.necessario} · disponível {item.disponivel}</small></span>
-              <b>{item.faltante} {item.unidade}</b>
-            </div>)}
-          </>}
-      </div>
-      {carregando ? <p className="notice" role="status">Carregando insumos...</p> : insumos.length === 0 ? <p className="notice">Cadastre um insumo na aba Estoque primeiro.</p> : (
-        <div className="cd" id="compra-form">
-          <h2>Registrar compra</h2>
+      {carregando ? <p className="notice" role="status">Carregando insumos...</p> : insumos.length === 0
+        ? <p className="notice">Cadastre um insumo na aba Estoque primeiro.</p>
+        : formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) fecharFormulario() }}><section className="cd add-dialog form-dialog" id="compra-form" role="dialog" aria-modal="true" aria-labelledby="compra-form-title">
+          <FecharModal onClick={fecharFormulario} />
+          <h2 id="compra-form-title">Registrar compra</h2>
           <Selecao rotulo="Fornecedor" id="compra.fornecedor" valor={fornecedor} onChange={setFornecedor}
             opcoes={fornecedores.map((row) => [row.id, row.nome])} />
           <Selecao rotulo="Insumo" id="compra.insumo" valor={sel} onChange={setSel} opcoes={insumos.map((i) => [i.id, i.nome])} />
@@ -106,8 +99,7 @@ export default function Compra() {
           <button className="bt" disabled={!valido || salvando} data-testid="compra.salvar" onClick={salvar}>
             {salvando ? 'Salvando...' : 'Salvar compra'}
           </button>
-        </div>
-      )}
+        </section></div>}
     </>
   )
 }

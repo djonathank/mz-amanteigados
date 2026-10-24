@@ -1,8 +1,15 @@
 # MZ Gestão
 
-Aplicativo de gestão para a MZ Bolachas da Maquiele, feito com React, TypeScript, Vite, Capacitor e SQLite local. A referência visual é [docs/design-telas.html](docs/design-telas.html); as regras e o escopo estão em [docs/documentacao-tecnica.md](docs/documentacao-tecnica.md).
+Aplicativo de gestão para a MZ Bolachas da Maquiele. Reúne cadastro de insumos e receitas, custos e precificação, vendas, estoque, encomendas, clientes e fornecedores, financeiro e relatórios. A interface é feita em React e TypeScript e usa SQLite local; opcionalmente, os dados podem ser espelhados em uma planilha Google Sheets da própria conta.
 
-## Como executar
+## Documentação
+
+- [Documentação técnica](docs/documentacao-tecnica.md): arquitetura, banco, regras de negócio, funcionalidades disponíveis e limitações conhecidas.
+- [Galeria de telas](docs/design-telas.html): referência visual explorável; inclui propostas que ainda não existem na aplicação.
+
+## Requisitos e comandos
+
+Use Node.js compatível com as versões atuais do Vite e Capacitor e npm.
 
 ```bash
 npm install
@@ -11,26 +18,20 @@ npm run build
 npm test
 ```
 
-O banco web usa `jeep-sqlite`; no Android/iOS, o app usa o plugin SQLite do Capacitor. O banco inicia sem cadastros demonstrativos; uma migração remove do uso os registros de exemplo das instalações existentes, preservando os demais dados.
+O Vite imprime o endereço local ao iniciar. O banco web usa `jeep-sqlite` e `sql.js`; Android/iOS usam `@capacitor-community/sqlite`. As migrações locais vão até a versão 9. Instalações novas não recebem cadastros demonstrativos e a migração 008 arquiva os dados de demonstração conhecidos em bases existentes.
 
-## Modo local e sincronização Google
+## Plataformas nativas
 
-O acesso ao aplicativo exige uma conta Google. No primeiro acesso, entre com a conta que será usada para criar a planilha `MZ Gestão - Dados` no Drive. Para manter os dados iguais em outros aparelhos, entre com a mesma conta em cada um. O app sincroniza o SQLite local após alterações, ao voltar a ficar online e ao usar **Sincronizar agora**. Os dados também ficam salvos no aparelho. Conflitos são mesclados por registro usando `updated_at` (última gravação vence). Ao sair da conta, o app retorna à tela de login e exige autenticação Google para continuar.
+O Capacitor está configurado com o identificador Android `br.com.mzbolachas.gestao`. Para preparar ou atualizar as plataformas nativas:
 
-Em **Mais → Conta Google e sincronização**, também é possível exportar um backup JSON e validar/restaurar um backup local. A restauração substitui os dados presentes no aparelho.
+```bash
+npx cap add android
+# Em um Mac com Xcode:
+npx cap add ios
+npm run cap:sync
+```
 
-Antes de usar:
-
-1. No Google Cloud Console, crie um projeto, configure a tela de consentimento OAuth e habilite **Google Drive API** e **Google Sheets API**. Para um app externo em teste, adicione as contas permitidas como test users.
-2. Crie clientes OAuth para Web, Android e iOS. No cliente Android, use o package `br.com.mzbolachas.gestao` e o SHA-1 da chave de assinatura usada para compilar. Use os IDs públicos de cliente OAuth; **não** coloque client secrets no app.
-3. Copie `.env.example` para `.env` e preencha `VITE_GOOGLE_WEB_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` e `GOOGLE_IOS_CLIENT_ID`. No cliente OAuth Web, cadastre como origens JavaScript autorizadas as origens exatas usadas no navegador, sem caminho: por exemplo, `http://127.0.0.1:5173` para este servidor de desenvolvimento e o domínio HTTPS da versão publicada. `localhost` e `127.0.0.1` são origens diferentes. O erro `400: origin_mismatch` indica que a origem aberta não está cadastrada nesse cliente Web; corrija-a em **Google Cloud Console → APIs e serviços → Credenciais → cliente OAuth Web → Origens JavaScript autorizadas**. O ID Web também é usado como público do token no login nativo Android; o cliente OAuth Android é validado pelo package e SHA-1 registrados no Google Cloud. Os IDs são públicos; nenhum segredo OAuth deve ser incluído no app.
-4. Gere as plataformas nativas se ainda não existirem (`npx cap add android` e, em um Mac, `npx cap add ios`), configure o URL scheme reverso do cliente iOS, depois rode `npm run cap:sync` com os IDs necessários disponíveis no ambiente.
-
-A autorização pede o escopo restrito `drive.file`; os tokens não são gravados no SQLite nem no `localStorage`. Na web, o token fica em memória e pode ser necessário reconectar após expirar ou reabrir o navegador. As planilhas destinam-se ao mesmo usuário Google em todos os aparelhos; compartilhamento com outras contas não é feito automaticamente.
-
-## Gerar APK Android
-
-Com os IDs OAuth configurados no `.env`, gere o APK de depuração com:
+`cap:sync` executa o build web e sincroniza os arquivos e plugins nativos. Para gerar APK Android de depuração:
 
 ```powershell
 npm run cap:sync
@@ -39,30 +40,42 @@ Push-Location android
 Pop-Location
 ```
 
-O arquivo fica em `android/app/build/outputs/apk/debug/app-debug.apk`. Esse APK é assinado com a chave de depuração e serve para instalação/testes; para publicar na Play Store, configure uma chave de release e cadastre no Google Cloud o package `br.com.mzbolachas.gestao` com o SHA-1 da chave correspondente.
+O APK fica em `android/app/build/outputs/apk/debug/app-debug.apk`. Ele usa a chave de depuração; publicação exige assinatura de release e configuração das credenciais correspondentes.
 
-## Escopo implementado
+## Uso local e Google Sheets opcional
 
-| Área | Estado |
+O primeiro acesso pode ser feito **somente neste aparelho**, informando o nome do perfil. Não é necessário entrar com Google para usar as telas, registrar operações ou guardar dados locais. O SQLite local é a fonte dos dados exibidos; a sincronização Google é opcional e requer conexão à internet.
+
+No perfil, acessado pelo avatar na tela inicial, conecte uma conta Google para criar/localizar a planilha `MZ Gestão - Dados` no Drive dessa conta. Use a mesma conta nos aparelhos que devem compartilhar os dados. O app sincroniza após alterações locais (agrupadas por 1,5 s), quando a conexão volta e sob demanda. Registros são mesclados por chave e `updated_at`; saldos de estoque são reconstruídos pelos movimentos sincronizados. A edição manual da planilha não é suportada.
+
+Para habilitar o OAuth e a sincronização:
+
+1. No Google Cloud Console, crie um projeto, configure o consentimento OAuth e habilite Google Drive API e Google Sheets API. Em modo de teste externo, cadastre os usuários autorizados.
+2. Configure clientes OAuth para Web e Android (e iOS se a plataforma for usada). No cliente Android, registre o package `br.com.mzbolachas.gestao` e o SHA-1 da chave de assinatura. Use IDs públicos de cliente OAuth; não inclua client secrets no aplicativo.
+3. Copie `.env.example` para `.env` e preencha `VITE_GOOGLE_WEB_CLIENT_ID`, `GOOGLE_WEB_CLIENT_ID` e, quando necessário, `GOOGLE_IOS_CLIENT_ID`. No cliente Web, autorize as origens exatas do navegador (por exemplo `http://127.0.0.1:5173`); `localhost` e `127.0.0.1` são origens distintas.
+4. Para iOS, configure também o URL scheme reverso do cliente conforme a configuração do plugin Google Auth.
+
+O app solicita `drive.file`. Tokens de acesso ficam em memória, não no SQLite nem no `localStorage`; o e-mail e o ID da planilha são usados localmente para lembrar a conta/arquivo. Na web, pode ser necessário reconectar após expiração ou recarregar a página. Não há backend próprio nem compartilhamento automático da planilha com outras contas.
+
+## Funcionalidades disponíveis
+
+| Área | O que existe na aplicação |
 |---|---|
-| Painel e navegação | Resumo de vendas, lucro estimado, contadores e ações rápidas; navegação com ícones SVG |
-| Insumos e compra | Cadastro, edição, pesquisa, exclusão protegida por referências e atualização do último preço pago |
-| Receitas | Cadastro e edição, perda, sub-receitas, tempo, modo e etapas de preparo; custos de ingredientes, gás e mão de obra |
-| Produtos e variantes | Variações por unidades, peso em g ou volume em ml, embalagem, rótulo e preço; edição por variante |
-| Precificação | Preço sugerido por produto/variante e simulador de aumento de custo dos insumos |
-| Venda e comprovante | Carrinho, Pix/dinheiro/cartão/fiado, comprovante compartilhável e PDF local |
-| Estoque e produção (Fase 2) | Saldo e mínimo de insumos/variantes, movimentos de compra, ajuste, perda, venda e produção; lotes, validade, custo médio ponderado, baixa FEFO e lista de compras por encomendas |
-| Operação (Fase 3) | Clientes, fornecedores, encomendas com sinal e status, entrega integrada à venda, contas a pagar/receber e lançamentos manuais |
-| Relatórios (Fase 4) | Vendas e lucro por período, produtos mais rentáveis, melhores clientes, histórico de custo e exportação CSV/PDF |
-| Primeiro acesso e persistência | Login Google obrigatório, SQLite com migrações aditivas e sem dados demonstrativos |
-| Login e sincronização Google | OAuth Capacitor/Web obrigatório, planilha criada no Drive do usuário, mesclagem por registro, sincronização automática online e migração de cabeçalhos da versão anterior |
-| Backup local | Exportação e validação/restauração de backup JSON pela tela de conta |
-| Apresentação | Componentes e cores alinhados à galeria de design; layout responsivo verificado entre 320 e 1280 px |
+| Início e navegação | Resumo do mês e do dia; barra inferior para Início, Receitas, ação central, Estoque e Mais |
+| Insumos e compras | Cadastro, busca, edição, estoque mínimo, movimentos/ajustes/perdas e compra com fornecedor, saldo e custo médio ponderado |
+| Receitas e produtos | Receitas com sub-receitas, perda, modo e etapas; produtos com variantes por unidades, peso ou volume e embalagem/rótulo |
+| Custos e precificação | Custo de ingredientes, mão de obra, gás, embalagem e rótulo; preço sugerido, margem, taxa de pagamento e simulação de aumento de insumo |
+| Vendas e comprovante | Carrinho, cliente, Pix/dinheiro/cartão, desconto, baixa de estoque, justificativa para saldo negativo, compartilhamento de texto e PDF |
+| Estoque | Saldos de insumos e produtos, alertas, ajustes, perdas e movimentos de estoque |
+| Clientes, fornecedores e encomendas | Cadastro de contatos, pedidos agendados, finalização, pagamento na entrega e cancelamento |
+| Financeiro e relatórios | Lançamentos, contas a pagar/receber, resumo por período, lucro estimado, clientes/produtos e exportação CSV/PDF de relatórios |
+| Conta | Nome e avatar de perfil local; conexão e sincronização Google opcionais |
 
-## Pendências conhecidas
+## Limitações conhecidas
 
-- Rascunho automático de formulários e testes automatizados de interface, integração com SQLite real e E2E.
-- CSV de backup geral e criptografia opcional do arquivo JSON.
-- A galeria de design contém também telas de fases futuras (Fases 5 e 6), ainda fora do escopo implementado.
+- A galeria visual contém telas conceituais para alérgenos, nutricional, kits/canais, calendário e outros recursos ainda não implementados.
+- Não há testes de interface/E2E nem integração automatizada com SQLite nativo ou APIs reais do Google.
 
-Os valores finais são armazenados em centavos. Compras atualizam o saldo e o custo médio ponderado; cadastros antigos sem saldo inicial não recebem estoque fictício durante a migração.
+## Notas de dados
+
+Valores monetários finais são persistidos em centavos; quantidades são armazenadas na unidade base (`g`, `ml` ou `un`). Migrações legadas não inventam saldos iniciais. Compras futuras atualizam o custo médio com base no saldo conhecido.

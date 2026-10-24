@@ -4,16 +4,18 @@ import { excluirInsumo, listarInsumos, salvarInsumo, type InsumoRow } from '../d
 import { formatBRL } from '../domain/money'
 import type { Unit } from '../domain/units'
 import { ajustarEstoque, definirEstoqueMinimoInsumo, listarAlertasEstoque, listarMovimentos } from '../data/phase2'
-import { AlertaConclusao, Campo, ConfirmacaoAcao, focarCampo, Icon, Selecao } from './ui'
-import { Link } from 'react-router-dom'
+import { AlertaConclusao, Campo, ConfirmacaoAcao, FecharModal, focarCampo, Icon, Selecao } from './ui'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { normalizarNumeroDigitado, type NumericMask } from '../domain/inputMask'
 
 const UNIDADES: [string, string][] = [['kg', 'kg'], ['g', 'g'], ['l', 'L'], ['ml', 'ml'], ['un', 'unidades']]
-const mascaraQuantidade = (unidade: string): NumericMask => unidade === 'kg' || unidade === 'l' ? 'quantidade' : 'inteiro'
+const mascaraQuantidade = (unidade: string): NumericMask => unidade === 'un' ? 'inteiro' : 'quantidade'
 const TIPOS: [string, string][] = [['ingrediente', 'Ingrediente'], ['embalagem', 'Embalagem'], ['rotulo', 'Rótulo']]
 
 export default function Insumos() {
   const db = useDb()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [lista, setLista] = useState<InsumoRow[]>([])
   const [movimentos, setMovimentos] = useState<Awaited<ReturnType<typeof listarMovimentos>>>([])
   const [alertas, setAlertas] = useState<Awaited<ReturnType<typeof listarAlertasEstoque>>>([])
@@ -22,6 +24,7 @@ export default function Insumos() {
   const [unidade, setUnidade] = useState<Unit | ''>('')
   const [qtd, setQtd] = useState('')
   const [preco, setPreco] = useState('')
+  const [custoInicial, setCustoInicial] = useState<{ qtd: string; preco: string } | null>(null)
   const [editando, setEditando] = useState<string | null>(null)
   const [erro, setErro] = useState('')
   const [confirmacao, setConfirmacao] = useState('')
@@ -37,6 +40,8 @@ export default function Insumos() {
   const [erroMovimento, setErroMovimento] = useState('')
   const [salvandoMovimento, setSalvandoMovimento] = useState(false)
   const [carregando, setCarregando] = useState(true)
+  const [formAberto, setFormAberto] = useState(false)
+  const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(async () => {
     try {
@@ -53,6 +58,7 @@ export default function Insumos() {
   useEffect(() => {
     void carregar().catch((e) => setErro(e instanceof Error ? e.message : String(e)))
   }, [carregar])
+  useEffect(() => { if (location.hash === '#insumo-form') setFormAberto(true) }, [location.hash])
 
   const limpar = () => {
     setNome('')
@@ -60,42 +66,61 @@ export default function Insumos() {
     setUnidade('')
     setQtd('')
     setPreco('')
+    setCustoInicial(null)
     setEditando(null)
     setErro('')
+    setFormAberto(false)
+    if (location.hash === '#insumo-form') navigate(`${location.pathname}${location.search}`, { replace: true })
   }
 
   const editar = (insumo: InsumoRow) => {
+    setFormAberto(true)
     setEditando(insumo.id)
     setNome(insumo.nome)
     setTipo(insumo.tipo)
     setUnidade(insumo.unidade_compra as Unit)
-    setQtd('1')
-    setPreco(((insumo.custo_medio * insumo.fator_compra) / 100).toFixed(2))
+    const qtdSalva = '1'
+    const precoSalvo = ((insumo.custo_medio * insumo.fator_compra) / 100).toFixed(2)
+    setQtd(qtdSalva)
+    setPreco(precoSalvo)
+    setCustoInicial({ qtd: qtdSalva, preco: precoSalvo })
     setConfirmacao('')
     setErro('')
     document.getElementById('insumo-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     focarCampo('insumo.nome')
   }
 
-  const valido = nome.trim() !== '' && !!tipo && !!unidade && Number(qtd) > 0 && Number(preco) > 0
+  const semAlterarCusto = Boolean(editando) && custoInicial !== null
+    && qtd === custoInicial.qtd && preco === custoInicial.preco
+  const dadosCustoValidos = semAlterarCusto || (Number(qtd) > 0 && Number(preco) > 0)
+  const valido = nome.trim() !== '' && !!tipo && !!unidade && dadosCustoValidos
   const mascaraDaQuantidade = unidade ? mascaraQuantidade(unidade) : 'quantidade'
   const salvar = async () => {
-    if (!valido || !unidade) return
+    if (!valido || !unidade || salvando) return
     const atualizando = Boolean(editando)
+    setSalvando(true)
+    setErro('')
     try {
       await salvarInsumo(db, {
         id: editando ?? undefined,
         nome,
         tipo,
         unidade,
-        quantidade: Number(qtd),
-        totalCents: Math.round(Number(preco) * 100),
+        quantidade: semAlterarCusto || !qtd.trim() ? undefined : Number(qtd),
+        totalCents: semAlterarCusto || !preco.trim() ? undefined : Math.round(Number(preco) * 100),
       })
       limpar()
       setConfirmacao(atualizando ? 'Insumo atualizado.' : 'Insumo salvo.')
-      await carregar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
+      return
+    } finally {
+      setSalvando(false)
+    }
+    try {
+      await carregar()
+    } catch (e) {
+      setErro(`Insumo salvo, mas não foi possível atualizar a lista: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -180,6 +205,7 @@ export default function Insumos() {
         if (event.target === event.currentTarget) fecharMovimento()
       }}>
         <section className="alert-dialog stock-modal" role="dialog" aria-modal="true" aria-labelledby="movimento-title">
+          <FecharModal onClick={fecharMovimento} />
           <span className="alert-icon"><Icon name={movimentoAberto.definirSaldo ? 'stock' : 'add'} size={26} /></span>
           <h2 id="movimento-title">{movimentoAberto.definirSaldo ? 'Ajustar o estoque' : 'Adicionar ou remover quantidade'}</h2>
           <p><b>{movimentoAberto.insumo.nome}</b><br />Saldo atual: {Number(movimentoAberto.insumo.estoque_atual ?? 0)} {movimentoAberto.insumo.unidade_base}</p>
@@ -221,10 +247,6 @@ export default function Insumos() {
       <h1>Estoque</h1>
       <p className="sb">Saldo, custo médio, mínimo e movimentações dos ingredientes e embalagens.</p>
       {erro && <p className="notice error" role="alert">{erro}</p>}
-      <div className="quick-actions">
-        <Link to="/planejamento">Lista de compras</Link>
-        <Link to="/relatorios">Relatórios</Link>
-      </div>
       <div className="stock-filters">
         <button className="bt o" type="button" aria-pressed={apenasReposicao}
           onClick={() => setApenasReposicao((value) => !value)}>
@@ -279,14 +301,17 @@ export default function Insumos() {
       </div>
       <div className="cd">
         <h2>Movimentações recentes</h2>
-        {!movimentos.length && <p className="notice">As movimentações aparecerão aqui após compras, ajustes, produção e vendas.</p>}
+        {!movimentos.length && <p className="notice">As movimentações aparecerão aqui após compras, ajustes e vendas.</p>}
         {movimentos.map((movement) => <div className="r" key={movement.id}>
           <span>{movement.item_nome}<small>{movement.tipo} · {new Date(movement.data).toLocaleString('pt-BR')}{movement.motivo ? ` · ${movement.motivo}` : ''}</small></span>
           <b>{movement.quantidade > 0 ? '+' : ''}{movement.quantidade}</b>
         </div>)}
       </div>
-      <div className="cd" id="insumo-form">
-        <h2>{editando ? 'Editar insumo' : 'Novo insumo'}</h2>
+      {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) limpar() }}>
+      <section className="add-dialog form-dialog" id="insumo-form" role="dialog" aria-modal="true" aria-labelledby="insumo-form-title">
+        <FecharModal onClick={limpar} />
+        <h2 id="insumo-form-title">{editando ? 'Editar insumo' : 'Novo insumo'}</h2>
+        {erro && <p className="notice error" role="alert">{erro}</p>}
         <Campo rotulo="Nome" id="insumo.nome" valor={nome} onChange={setNome} placeholder="Ex.: farinha de trigo" />
         <Selecao rotulo="Tipo" id="insumo.tipo" valor={tipo} onChange={setTipo} opcoes={TIPOS} />
         <div className="g">
@@ -298,14 +323,15 @@ export default function Insumos() {
           }} opcoes={UNIDADES} disabled={Boolean(editando)} />
         </div>
         <Campo rotulo="Valor total pago (R$)" id="insumo.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
+        {editando && <p className="helper">Quantidade e valor são uma referência calculada do custo médio salvo. Se não os alterar, o custo atual será preservado; altere ambos para recalculá-lo.</p>}
         {unidade === 'kg' && <p className="helper">O custo será convertido automaticamente para centavos por grama.</p>}
         {unidade === 'l' && <p className="helper">O custo será convertido automaticamente para centavos por mililitro.</p>}
         {editando && <p className="helper">A unidade de compra fica bloqueada durante a edição para evitar recalcular o custo na unidade errada.</p>}
-        <button className="bt" disabled={!valido} data-testid="insumo.salvar" onClick={salvar}>
-          {editando ? 'Salvar alterações' : 'Salvar insumo'}
+        <button className="bt" disabled={!valido || salvando} data-testid="insumo.salvar" onClick={salvar}>
+          {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar insumo'}
         </button>
         {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
-      </div>
+      </section></div>}
     </>
   )
 }

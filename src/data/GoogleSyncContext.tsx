@@ -5,8 +5,6 @@ import { withoutDatabaseChangeNotifications, subscribeDatabaseChanges } from './
 import { encontrarOuCriarPlanilha, obterPlanilha, sincronizarPlanilha } from './googleSheetsSync'
 
 const SCOPES = ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/drive.file']
-const STORAGE_EMAIL = 'mz_google_email'
-const STORAGE_SHEET = (email: string) => `mz_google_sheet_${email.toLowerCase()}`
 let inicializacao: Promise<void> | null = null
 
 interface Sessao {
@@ -103,8 +101,6 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
           (operation) => withoutDatabaseChangeNotifications(operation),
         )
         const sincronizadoEm = new Date().toISOString()
-        localStorage.setItem(STORAGE_EMAIL, atual.email)
-        localStorage.setItem(STORAGE_SHEET(atual.email), result.spreadsheetId)
         setEstado({
           email: atual.email,
           nome: atual.nome,
@@ -137,22 +133,21 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     sessao.current = renovada
     setEstado((value) => ({ ...value, email: renovada.email, nome: renovada.nome }))
-    const sheetId = localStorage.getItem(STORAGE_SHEET(atual.email)) ?? ''
-    await sync(renovada, sheetId)
+    await sync(renovada)
   }, [sync])
 
   useEffect(() => {
     let ativo = true
     if (Capacitor.isNativePlatform()) {
       void inicializarGoogle().then(async () => {
-        const email = localStorage.getItem(STORAGE_EMAIL)
-        if (!email || !ativo) return
         const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
         const authentication = await GoogleAuth.refresh()
         if (!authentication.accessToken || !ativo) return
-        const atual = { email, nome: '', accessToken: authentication.accessToken, accessTokenExpiresAt: Number.MAX_SAFE_INTEGER }
+        const profile = await obterPerfilGoogle(authentication.accessToken)
+        if (!profile.email || !ativo) return
+        const atual = { email: profile.email, nome: profile.name ?? '', accessToken: authentication.accessToken, accessTokenExpiresAt: Number.MAX_SAFE_INTEGER }
         sessao.current = atual
-        setEstado((value) => ({ ...value, email }))
+        setEstado((value) => ({ ...value, email: atual.email, nome: atual.nome }))
         await renovarESincronizar(atual)
       }).catch((error) => {
         if (ativo) setEstado((value) => ({
@@ -163,11 +158,6 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
         if (ativo) setAutenticacaoPronta(true)
       })
     } else {
-      const email = localStorage.getItem(STORAGE_EMAIL)
-      if (email) setEstado((value) => ({
-        ...value,
-        erro: 'Entre novamente com sua conta Google para acessar o aplicativo.',
-      }))
       setAutenticacaoPronta(true)
     }
     return () => { ativo = false }
@@ -245,7 +235,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       }))
       throw error
     }
-  }, [sync])
+  }, [db, sync])
 
   const desconectar = useCallback(async () => {
     if (Capacitor.isNativePlatform()) {
@@ -257,8 +247,6 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       })
     }
     sessao.current = null
-    if (estado.email) localStorage.removeItem(STORAGE_SHEET(estado.email))
-    localStorage.removeItem(STORAGE_EMAIL)
     setEstado(estadoVazio)
   }, [estado.email])
 

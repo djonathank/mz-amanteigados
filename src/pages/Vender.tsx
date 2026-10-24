@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
 import { carregarBase, custoDaVariante, type Base } from '../data/calculos'
 import { registrarVenda } from '../data/repos'
-import { listarClientes, listarEncomendas, salvarEncomenda, type ClienteRow, type EncomendaRow } from '../data/phase3'
+import { listarClientes, salvarEncomenda, type ClienteRow } from '../data/phase3'
 import { formatBRL } from '../domain/money'
-import { formatBRDate } from '../domain/date'
-import { Campo, Selecao } from './ui'
+import { Campo, FecharModal, Selecao } from './ui'
 
 const FORMAS: [string, string][] = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']]
 const padraoData = () => {
@@ -18,9 +17,6 @@ const proximoDia = (data: string) => {
   proximo.setDate(proximo.getDate() + 1)
   return `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-${String(proximo.getDate()).padStart(2, '0')}`
 }
-const STATUS_ENCOMENDA: Record<EncomendaRow['status'], string> = {
-  pedido: 'Pedido', produzindo: 'Produzindo', pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado', pago: 'Pago',
-}
 export default function Vender() {
   const db = useDb()
   const nav = useNavigate()
@@ -29,7 +25,6 @@ export default function Vender() {
   const [forma, setForma] = useState('')
   const [clienteId, setClienteId] = useState('')
   const [clientes, setClientes] = useState<ClienteRow[]>([])
-  const [encomendas, setEncomendas] = useState<EncomendaRow[]>([])
   const [desconto, setDesconto] = useState('')
   const [modo, setModo] = useState<'agora' | 'agendada'>('agora')
   const [dataEntrega, setDataEntrega] = useState(padraoData())
@@ -40,8 +35,8 @@ export default function Vender() {
   const [salvando, setSalvando] = useState(false)
   useEffect(() => {
     let ativo = true
-    void Promise.all([carregarBase(db), listarClientes(db), listarEncomendas(db)]).then(([dados, customers, orders]) => {
-      if (ativo) { setBase(dados); setClientes(customers); setEncomendas(orders) }
+    void Promise.all([carregarBase(db), listarClientes(db)]).then(([dados, customers]) => {
+      if (ativo) { setBase(dados); setClientes(customers) }
     })
       .catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : String(e)) })
     return () => { ativo = false }
@@ -57,10 +52,6 @@ export default function Vender() {
   const hoje = padraoData()
   const dataMinimaEncomenda = proximoDia(hoje)
   const mudar = (id: string, d: number) => setCarrinho((atual) => ({ ...atual, [id]: Math.max(0, (atual[id] ?? 0) + d) }))
-  const definirQuantidade = (id: string, valor: string) => {
-    const quantidade = Math.max(1, Math.floor(Number(valor) || 1))
-    setCarrinho((atual) => ({ ...atual, [id]: quantidade }))
-  }
   const finalizar = async (motivoEstoqueNegativo?: string) => {
     if (!itens.length || salvando || !clienteId || (modo === 'agora' && (!forma || descontoCents > subtotal))
       || (modo === 'agendada' && (!dataEntrega || dataEntrega < dataMinimaEncomenda))) return
@@ -105,10 +96,10 @@ export default function Vender() {
   return (
     <>
       <h1>Vendas</h1>
-      <p className="sb">Venda agora ou agende uma encomenda.</p>
+      <p className="sb">Venda agora ou agende uma venda para outra data.</p>
       <div className="sg" role="group" aria-label="Tipo de pedido">
         <button type="button" className={modo === 'agora' ? 'a' : ''} onClick={() => setModo('agora')}>Vender agora</button>
-        <button type="button" className={modo === 'agendada' ? 'a' : ''} onClick={() => { setModo('agendada'); if (dataEntrega < dataMinimaEncomenda) setDataEntrega(dataMinimaEncomenda) }}>Agendar encomenda</button>
+        <button type="button" className={modo === 'agendada' ? 'a' : ''} onClick={() => { setModo('agendada'); if (dataEntrega < dataMinimaEncomenda) setDataEntrega(dataMinimaEncomenda) }}>Venda agendada</button>
       </div>
       {erro && <p className="notice error" role="alert">{erro}</p>}
       {base.variantes.length === 0 && <p className="notice">Cadastre um produto em Mais, Produtos à venda.</p>}
@@ -130,7 +121,17 @@ export default function Vender() {
         </div>
       </section>
       {itens.length > 0 && <div className="cd cart-card">
-          <h2>Encomenda</h2>
+          <h2>{modo === 'agendada' ? 'Venda agendada' : 'Sua venda'}</h2>
+          <div className="cart-lines">
+            {itens.map((item) => <div className="r cart-line" key={item.id}>
+              <span>{item.produto_nome}<small>{item.nome} · {formatBRL(item.preco_cents * carrinho[item.id])}</small></span>
+              <div className="quantity-controls" aria-label={`Quantidade de ${item.produto_nome} ${item.nome}`}>
+                <button className="lk" type="button" aria-label={`Remover uma unidade de ${item.nome}`} onClick={() => mudar(item.id, -1)}>−</button>
+                <b>{carrinho[item.id]}</b>
+                <button className="lk" type="button" aria-label={`Adicionar uma unidade de ${item.nome}`} onClick={() => mudar(item.id, 1)}>+</button>
+              </div>
+            </div>)}
+          </div>
           {modo === 'agendada' ? <>
             <Campo rotulo="Data da entrega" id="encomenda.data" tipo="date" valor={dataEntrega} min={dataMinimaEncomenda} onChange={setDataEntrega} />
             <Campo rotulo="Observações" id="encomenda.observacoes" valor={observacoes} onChange={setObservacoes} />
@@ -150,12 +151,13 @@ export default function Vender() {
             disabled={salvando || !clienteId || (modo === 'agora' && (!forma || descontoCents > subtotal))
               || (modo === 'agendada' && (!dataEntrega || dataEntrega < dataMinimaEncomenda))}
             onClick={() => void finalizar()}>
-            {salvando ? 'Salvando...' : modo === 'agora' ? 'Finalizar' : 'Salvar encomenda'}
+            {salvando ? 'Salvando...' : modo === 'agora' ? 'Finalizar venda' : 'Agendar venda'}
           </button>
         </div>
       )}
       </>}
       {motivoEstoquePendente && <section className="cd stock-modal" role="alertdialog" aria-modal="true" aria-labelledby="motivo-estoque-titulo">
+        <FecharModal onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }} />
         <h2 id="motivo-estoque-titulo">Confirmar venda com estoque negativo</h2>
         <p className="notice error">{motivoEstoquePendente}</p>
         <Campo rotulo="Motivo" id="venda.motivo-estoque" valor={motivoEstoque} onChange={setMotivoEstoque} />
@@ -163,18 +165,6 @@ export default function Vender() {
           <button className="lk" type="button" onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }}>Cancelar</button>
           <button className="bt" type="button" disabled={!motivoEstoque.trim() || salvando} onClick={() => { setMotivoEstoquePendente(''); void finalizar(motivoEstoque.trim()) }}>Confirmar venda</button>
         </div>
-      </section>}
-      {false && <section className="cd orders-card">
-        <h2>Encomendas em andamento</h2>
-        {!encomendas.filter((order) => ['pedido', 'produzindo', 'pronto'].includes(order.status)).length
-          ? <p className="notice">Nenhuma encomenda em andamento.</p>
-          : encomendas.filter((order) => ['pedido', 'produzindo', 'pronto'].includes(order.status)).slice(0, 5).map((order) => (
-            <div className="order-row" key={order.id}>
-              <div><b>{order.cliente_nome || 'Cliente não informado'}</b><small>{formatBRDate(order.data_entrega.slice(0, 10))} · {formatBRL(order.total_cents)}</small></div>
-              <span className="pl">{STATUS_ENCOMENDA[order.status]}</span>
-            </div>
-          ))}
-        <button className="bt o" type="button" onClick={() => nav('/encomendas')}>Ver pedidos</button>
       </section>}
     </>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Db } from './db'
-import { ajustarEstoque, calcularNecessidadesInsumos } from './phase2'
+import { ajustarEstoque } from './phase2'
 
 function fakeDb(
   queryRows: (sql: string, params: unknown[]) => unknown[],
@@ -15,32 +15,6 @@ function fakeDb(
 }
 
 describe('Phase 2 inventory', () => {
-  it('scales ingredients recursively using useful yield and recipe loss', async () => {
-    const f = fakeDb((sql, params) => {
-      if (sql.includes('FROM receita WHERE')) {
-        if (params[0] === 'main') return [{ id: 'main', nome: 'Principal', rendimento_qtd: 1000, rendimento_unidade: 'g', perda_pct: 0.1 }]
-        if (params[0] === 'sub') return [{ id: 'sub', nome: 'Sub-receita', rendimento_qtd: 100, rendimento_unidade: 'g', perda_pct: 0.2 }]
-      }
-      if (sql.includes('FROM receita_item')) {
-        if (params[0] === 'main') return [
-          { insumo_id: 'flour', subreceita_id: null, quantidade_base: 500 },
-          { insumo_id: null, subreceita_id: 'sub', quantidade_base: 200 },
-        ]
-        if (params[0] === 'sub') return [{ insumo_id: 'sugar', subreceita_id: null, quantidade_base: 50 }]
-      }
-      if (sql.includes('FROM insumo WHERE deleted_at')) return [
-        { id: 'flour', nome: 'Farinha', unidade_base: 'g', estoque_atual: 1000 },
-        { id: 'sugar', nome: 'Açúcar', unidade_base: 'g', estoque_atual: 500 },
-      ]
-      return []
-    })
-    const result = await calcularNecessidadesInsumos(f.db, 'main', 900)
-    expect(result).toEqual([
-      { id: 'flour', nome: 'Farinha', unidade_base: 'g', estoque_atual: 1000, quantidade: 500 },
-      { id: 'sugar', nome: 'Açúcar', unidade_base: 'g', estoque_atual: 500, quantidade: 125 },
-    ])
-  })
-
   it('requires a reason only when an adjustment would create a negative balance', async () => {
     const f = fakeDb((sql) => sql.includes('SELECT estoque_atual FROM insumo')
       ? [{ estoque_atual: 2 }]

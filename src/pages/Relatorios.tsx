@@ -4,7 +4,7 @@ import { useDb } from '../data/DbContext'
 import { criarPdf } from '../data/pdf'
 import { gerarCsv, type RelatorioTabela } from '../data/reports'
 import { formatBRL } from '../domain/money'
-import { formatBRDate } from '../domain/date'
+import { formatBRDate, localDateAfterIso, localDateStartIso, localDateString } from '../domain/date'
 import { Campo } from './ui'
 
 interface ResumoRow {
@@ -16,9 +16,9 @@ interface CustoRow { insumo: string; data: string; custo_por_base: number; unida
 
 const primeiroDiaDoMes = () => {
   const today = new Date()
-  return new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  return localDateString(new Date(today.getFullYear(), today.getMonth(), 1))
 }
-const hoje = () => new Date().toISOString().slice(0, 10)
+const hoje = () => localDateString()
 
 function baixar(nome: string, conteudo: BlobPart, tipo: string) {
   const blob = new Blob([conteudo], { type: tipo })
@@ -50,8 +50,8 @@ export default function Relatorios() {
     setErro('')
     setCarregando(true)
     try {
-      const from = new Date(`${inicio}T00:00:00`).toISOString()
-      const to = new Date(new Date(`${fim}T00:00:00`).getTime() + 86400000).toISOString()
+      const from = localDateStartIso(inicio)
+      const to = localDateAfterIso(fim)
       const [summaryRows, productRows, customerRows, costRows] = await Promise.all([
         db.query<ResumoRow>(
           `SELECT COUNT(*) AS vendas, COALESCE(SUM(v.total_cents),0) AS total_cents,

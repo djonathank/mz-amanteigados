@@ -2,7 +2,7 @@ import type { Db } from './db'
 
 export const SYNC_TABLES = [
   'insumo', 'fornecedor', 'cliente', 'receita', 'receita_item', 'produto', 'produto_variante',
-  'compra', 'compra_item', 'historico_preco_insumo', 'movimento_estoque', 'lote', 'lote_saida',
+  'compra', 'compra_item', 'historico_preco_insumo', 'movimento_estoque',
   'venda', 'venda_item', 'encomenda', 'encomenda_item', 'lancamento', 'config',
 ] as const
 

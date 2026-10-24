@@ -24,14 +24,16 @@ export const listarInsumos = (db: Db) =>
 
 export async function salvarInsumo(
   db: Db,
-  i: { id?: string; nome: string; unidade: Unit; quantidade: number; totalCents: number; tipo?: string },
+  i: { id?: string; nome: string; unidade: Unit; quantidade?: number; totalCents?: number; tipo?: string },
 ) {
-  if (!i.nome.trim() || !(i.quantidade > 0) || !(i.totalCents > 0)) throw new Error('Informe nome, quantidade e valor válidos')
+  if (!i.nome.trim()) throw new Error('Informe um nome válido.')
   const t = agora()
-  const values = [
-    i.nome.trim(), i.tipo ?? 'ingrediente', baseOf(i.unidade), i.unidade, toBase(1, i.unidade),
-    costPerBase(i.totalCents, i.quantidade, i.unidade), t,
-  ]
+  const atualizandoCusto = i.quantidade !== undefined || i.totalCents !== undefined
+  const custoValido = Number.isFinite(i.quantidade) && Number(i.quantidade) > 0
+    && Number.isInteger(i.totalCents) && Number(i.totalCents) > 0
+  if (atualizandoCusto && !custoValido) {
+    throw new Error('Informe quantidade e valor válidos para atualizar o custo.')
+  }
   if (i.id) {
     const [atual] = await db.query<{ unidade_base: BaseUnit }>(
       'SELECT unidade_base FROM insumo WHERE id=? AND deleted_at IS NULL', [i.id],
@@ -49,16 +51,28 @@ export async function salvarInsumo(
         throw new Error('Não é possível alterar a unidade base enquanto o insumo estiver vinculado a receitas ou embalagens.')
       }
     }
-    await db.run(
-      'UPDATE insumo SET nome=?, tipo=?, unidade_base=?, unidade_compra=?, fator_compra=?, custo_medio=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
-      [...values, i.id],
-    )
+    if (atualizandoCusto) {
+      const values = [i.nome.trim(), i.tipo ?? 'ingrediente', baseOf(i.unidade), i.unidade, toBase(1, i.unidade),
+        costPerBase(Number(i.totalCents), Number(i.quantidade), i.unidade), t, i.id]
+      await db.run(
+        'UPDATE insumo SET nome=?, tipo=?, unidade_base=?, unidade_compra=?, fator_compra=?, custo_medio=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
+        values,
+      )
+    } else {
+      await db.run('UPDATE insumo SET nome=?, tipo=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
+        [i.nome.trim(), i.tipo ?? 'ingrediente', t, i.id])
+    }
     return i.id
   }
+  if (!custoValido) throw new Error('Informe nome, quantidade e valor válidos.')
   const id = novoId()
+  const values = [
+    i.nome.trim(), i.tipo ?? 'ingrediente', baseOf(i.unidade), i.unidade, toBase(1, i.unidade),
+    costPerBase(Number(i.totalCents), Number(i.quantidade), i.unidade),
+  ]
   await db.run(
     'INSERT INTO insumo (id, nome, tipo, unidade_base, unidade_compra, fator_compra, custo_medio, estoque_atual, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    [id, ...values.slice(0, 6), 0, t, t],
+    [id, ...values, 0, t, t],
   )
   return id
 }
@@ -159,6 +173,10 @@ export async function salvarReceita(
   }
   const id = r.id ?? novoId()
   const t = agora()
+  if (r.id) {
+    const [existente] = await db.query<{ id: string }>('SELECT id FROM receita WHERE id=? AND deleted_at IS NULL', [r.id])
+    if (!existente) throw new Error('A receita que você está editando não foi encontrada.')
+  }
   await db.transaction(async () => {
     if (r.id) {
       await db.run(
@@ -167,7 +185,8 @@ export async function salvarReceita(
         [r.nome.trim(), r.rendimento, r.rendimentoUnidade ?? 'un', r.perdaPct, r.tempoMin ?? null,
           r.modoPreparo?.trim() || null, JSON.stringify(r.passosPreparo ?? []), t, id],
       )
-      await db.run('DELETE FROM receita_item WHERE receita_id=?', [id])
+      // Keep deletion tombstones so the sheet sync does not restore old ingredients.
+      await db.run('UPDATE receita_item SET deleted_at=?, updated_at=? WHERE receita_id=? AND deleted_at IS NULL', [t, t, id])
     } else {
       await db.run(
         'INSERT INTO receita (id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo, passos_preparo, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
@@ -186,7 +205,7 @@ export async function salvarReceita(
 }
 
 export async function excluirReceita(db: Db, id: string) {
-  const [componentUse, productUse, lotUse] = await Promise.all([
+  const [componentUse, productUse] = await Promise.all([
     db.query<{ total: number }>(
       `SELECT COUNT(*) AS total FROM receita_item ri JOIN receita r ON r.id=ri.receita_id
        WHERE ri.subreceita_id=? AND ri.deleted_at IS NULL AND r.deleted_at IS NULL`, [id],
@@ -194,12 +213,9 @@ export async function excluirReceita(db: Db, id: string) {
     db.query<{ total: number }>(
       'SELECT COUNT(*) AS total FROM produto WHERE receita_id=? AND deleted_at IS NULL', [id],
     ),
-    db.query<{ total: number }>(
-      'SELECT COUNT(*) AS total FROM lote WHERE receita_id=? AND deleted_at IS NULL', [id],
-    ),
   ])
-  if ([componentUse, productUse, lotUse].some(([row]) => Number(row?.total ?? 0) > 0)) {
-    throw new Error('Esta receita está vinculada a outra receita, produto ou lote. Remova essas referências antes de excluir.')
+  if ([componentUse, productUse].some(([row]) => Number(row?.total ?? 0) > 0)) {
+    throw new Error('Esta receita está vinculada a outra receita ou produto. Remova essas referências antes de excluir.')
   }
   await db.run('UPDATE receita SET deleted_at = ?, updated_at = ? WHERE id = ?', [agora(), agora(), id])
 }
@@ -319,6 +335,8 @@ export const listarVariantes = (db: Db) =>
 
 export async function atualizarPrecoVariante(db: Db, varianteId: string, precoCents: number) {
   if (!Number.isInteger(precoCents) || precoCents < 0) throw new Error('O preço precisa ser um valor válido em centavos')
+  const [existente] = await db.query<{ id: string }>('SELECT id FROM produto_variante WHERE id=? AND deleted_at IS NULL', [varianteId])
+  if (!existente) throw new Error('A variante que você está editando não foi encontrada.')
   await db.run(
     'UPDATE produto_variante SET preco_cents=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
     [precoCents, agora(), varianteId],
@@ -365,6 +383,8 @@ export async function salvarProduto(
   const t = agora()
   await db.transaction(async () => {
     if (p.id) {
+      const [existente] = await db.query<{ id: string }>('SELECT id FROM produto WHERE id=? AND deleted_at IS NULL', [id])
+      if (!existente) throw new Error('O produto que você está editando não foi encontrado.')
       await db.run('UPDATE produto SET nome=?, receita_id=?, updated_at=? WHERE id=? AND deleted_at IS NULL', [p.nome.trim(), p.receitaId, t, id])
     } else {
       await db.run('INSERT INTO produto (id, nome, receita_id, created_at, updated_at) VALUES (?,?,?,?,?)', [id, p.nome.trim(), p.receitaId, t, t])
@@ -458,51 +478,16 @@ export async function registrarVenda(
       if (i.quantidade > stock && !reason) {
         throw new Error(`Estoque insuficiente para uma variante da venda (${stock} disponível). Informe o motivo para confirmar saldo negativo.`)
       }
-      const lots = await db.query<{ id: string; remaining: number; cost: number | null }>(
-        `SELECT l.id,
-                COALESCE(SUM(m.quantidade), 0) AS remaining,
-                (SELECT mp.custo_unit FROM movimento_estoque mp
-                 WHERE mp.item_tipo='variante' AND mp.item_id=? AND mp.origem_id=l.id AND mp.tipo='producao'
-                 ORDER BY mp.data LIMIT 1) AS cost
-         FROM lote l JOIN movimento_estoque m ON m.origem_id=l.id AND m.item_tipo='variante' AND m.item_id=?
-         WHERE l.deleted_at IS NULL AND m.deleted_at IS NULL
-         GROUP BY l.id HAVING remaining > 0
-         ORDER BY CASE WHEN l.data_validade IS NULL THEN 1 ELSE 0 END, l.data_validade, l.data_fabricacao`,
-        [i.varianteId, i.varianteId],
+      await db.run(
+        `INSERT INTO venda_item (id, venda_id, variante_id, lote_id, quantidade, preco_unit_cents, custo_unit_cents, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [novoId(), id, i.varianteId, null, i.quantidade, i.precoCents, i.custoCents, t, t],
       )
-      let remaining = i.quantidade
-      const allocations: { loteId: string | null; quantity: number; cost: number }[] = []
-      for (const lot of lots) {
-        if (remaining <= 0) break
-        const quantity = Math.min(remaining, Number(lot.remaining))
-        if (quantity > 0) {
-          allocations.push({ loteId: lot.id, quantity, cost: Number(lot.cost ?? i.custoCents) })
-          remaining -= quantity
-        }
-      }
-      const trackedBalance = lots.reduce((sum, lot) => sum + Number(lot.remaining), 0)
-      const untrackedAvailable = Math.max(0, stock - trackedBalance)
-      if (remaining > 0 && untrackedAvailable > 0) {
-        const quantity = Math.min(remaining, untrackedAvailable)
-        allocations.push({ loteId: null, quantity, cost: i.custoCents })
-        remaining -= quantity
-      }
-      if (remaining > 0) {
-        if (!reason) throw new Error('Informe o motivo para permitir saldo negativo.')
-        allocations.push({ loteId: null, quantity: remaining, cost: i.custoCents })
-      }
-      for (const allocation of allocations) {
-        await db.run(
-          `INSERT INTO venda_item (id, venda_id, variante_id, lote_id, quantidade, preco_unit_cents, custo_unit_cents, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?)`,
-          [novoId(), id, i.varianteId, allocation.loteId, allocation.quantity, i.precoCents, allocation.cost, t, t],
-        )
-        await db.run(
-          `INSERT INTO movimento_estoque (id, item_tipo, item_id, tipo, quantidade, custo_unit, origem_id, data, motivo, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-          [novoId(), 'variante', i.varianteId, 'venda', -allocation.quantity, allocation.cost, allocation.loteId, t, reason || null, t, t],
-        )
-      }
+      await db.run(
+        `INSERT INTO movimento_estoque (id, item_tipo, item_id, tipo, quantidade, custo_unit, origem_id, data, motivo, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [novoId(), 'variante', i.varianteId, 'venda', -i.quantidade, i.custoCents, null, t, reason || null, t, t],
+      )
       await db.run('UPDATE produto_variante SET estoque_atual=?, updated_at=? WHERE id=?', [stock - i.quantidade, t, i.varianteId])
     }
     if (total > 0) {

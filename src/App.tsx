@@ -1,7 +1,8 @@
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect } from 'react'
-import { DbProvider } from './data/DbContext'
-import { GoogleSyncProvider, useGoogleSync } from './data/GoogleSyncContext'
+import { useEffect, useState } from 'react'
+import { DbProvider, useDb } from './data/DbContext'
+import { GoogleSyncProvider } from './data/GoogleSyncContext'
+import { lerConfig } from './data/repos'
 import Comprovante from './pages/Comprovante'
 import Compra from './pages/Compra'
 import Custos from './pages/Custos'
@@ -15,7 +16,6 @@ import { Icon } from './pages/ui'
 import Vender from './pages/Vender'
 import PrimeiroAcesso from './pages/PrimeiroAcesso'
 import MenuUsuario from './pages/MenuUsuario'
-import Producao from './pages/Producao'
 import Relatorios from './pages/Relatorios'
 import Gestao from './pages/Gestao'
 
@@ -33,6 +33,7 @@ function destinoCadastro(pathname: string): string {
   if (pathname === '/produtos') return '/produtos#produto-form'
   if (pathname === '/estoque') return '/estoque#insumo-form'
   if (pathname === '/compra') return '/compra#compra-form'
+  if (pathname === '/planejamento') return '/planejamento#compra-form'
   if (pathname === '/clientes' || pathname === '/fornecedores') return `${pathname}#${pathname.slice(1)}-form`
   if (pathname === '/encomendas') return '/vender'
   if (pathname === '/financeiro') return '/financeiro#financeiro-form'
@@ -44,6 +45,7 @@ function Navegacao() {
   const location = useLocation()
   const navigate = useNavigate()
   const { pathname } = location
+  const [cadastroAberto, setCadastroAberto] = useState(false)
 
   useEffect(() => {
     if (!location.hash) return
@@ -52,6 +54,22 @@ function Navegacao() {
     })
     return () => window.cancelAnimationFrame(frame)
   }, [location.hash, pathname])
+
+  useEffect(() => { setCadastroAberto(false) }, [pathname, location.hash])
+
+  const abrirCadastro = () => {
+    if (pathname === '/estoque') {
+      navigate('/estoque#insumo-form')
+      return
+    }
+    if (pathname === '/produtos') {
+      navigate('/produtos#produto-form')
+      return
+    }
+    navigate(destinoCadastro(pathname))
+  }
+
+  const telaComOpcoesDeCadastro = pathname === '/estoque'
 
   return (
     <>
@@ -66,7 +84,11 @@ function Navegacao() {
                 className={`nav-add${vendaAtiva ? ' active' : ''}`}
                 aria-label="Criar novo"
                 data-testid="nav.add"
-                onClick={() => navigate(destinoCadastro(pathname))}
+                aria-expanded={telaComOpcoesDeCadastro && cadastroAberto}
+                onClick={() => {
+                  if (telaComOpcoesDeCadastro) setCadastroAberto((aberto) => !aberto)
+                  else abrirCadastro()
+                }}
               />
             )
           }
@@ -95,6 +117,16 @@ function Navegacao() {
           )
         })}
       </nav>
+      {pathname === '/estoque' && cadastroAberto && <div className="stock-add-menu" role="menu" aria-label="Ações de insumo">
+        <button type="button" role="menuitem" onClick={abrirCadastro}>
+          <span className="stock-extra-action-icon"><Icon name="add" /></span>
+          <span><b>Cadastrar insumo</b><small>Adicionar ingrediente, embalagem ou rótulo</small></span>
+        </button>
+        <button type="button" role="menuitem" onClick={() => { setCadastroAberto(false); navigate('/compra#compra-form') }}>
+          <span className="stock-extra-action-icon"><Icon name="box" /></span>
+          <span><b>Registrar compra</b><small>Adicionar uma compra de insumos</small></span>
+        </button>
+      </div>}
     </>
   )
 }
@@ -113,19 +145,31 @@ export default function App() {
 
 function Rotas() {
   const location = useLocation()
-  const google = useGoogleSync()
+  const db = useDb()
+  const [perfil, setPerfil] = useState<string | null>(null)
 
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
-  if (!google.autenticacaoPronta) return <p className="sb">Validando sua conta Google...</p>
-  const precisaAutenticar = !google.email
-  if (precisaAutenticar && location.pathname !== '/primeiro-acesso') return <Navigate to="/primeiro-acesso" replace />
-  if (!precisaAutenticar && location.pathname === '/primeiro-acesso') return <Navigate to="/" replace />
+  useEffect(() => {
+    let ativo = true
+    setPerfil(null)
+    void lerConfig(db).then((config) => {
+      if (ativo) setPerfil(config.nome_usuario?.trim() ?? '')
+    }).catch(() => {
+      if (ativo) setPerfil('')
+    })
+    return () => { ativo = false }
+  }, [db, location.pathname])
+
+  if (perfil === null) return <p className="sb">Preparando seu espaço...</p>
+  const precisaConfigurarPerfil = !perfil
+  if (precisaConfigurarPerfil && location.pathname !== '/primeiro-acesso') return <Navigate to="/primeiro-acesso" replace />
+  if (!precisaConfigurarPerfil && location.pathname === '/primeiro-acesso') return <Navigate to="/" replace />
 
   return (
-    <div className={`phone${precisaAutenticar ? ' first-access-shell' : ''}${location.pathname === '/mais' ? ' more-shell' : ''}`}>
+    <div className={`phone${precisaConfigurarPerfil ? ' first-access-shell' : ''}${location.pathname === '/mais' ? ' more-shell' : ''}`}>
       <main>
         <Routes>
           <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
@@ -133,8 +177,8 @@ function Rotas() {
           <Route path="/precificacao" element={<Precificacao />} />
           <Route path="/receitas" element={<Receitas />} />
           <Route path="/estoque" element={<Insumos />} />
-          <Route path="/producao" element={<Producao />} />
-          <Route path="/planejamento" element={<Navigate to="/compra" replace />} />
+          <Route path="/producao" element={<Navigate to="/mais" replace />} />
+          <Route path="/planejamento" element={<Compra />} />
           <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/clientes" element={<Gestao tela="clientes" />} />
           <Route path="/fornecedores" element={<Gestao tela="fornecedores" />} />
@@ -149,7 +193,7 @@ function Rotas() {
           <Route path="/custos" element={<Custos />} />
         </Routes>
       </main>
-      {!precisaAutenticar && <Navegacao />}
+      {!precisaConfigurarPerfil && <Navegacao />}
     </div>
   )
 }

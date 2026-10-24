@@ -1,11 +1,8 @@
-export type OrderStatus = 'pedido' | 'pago' | 'produzindo' | 'pronto' | 'entregue' | 'cancelado'
+export type OrderStatus = 'agendado' | 'finalizado' | 'cancelado'
 
 const NEXT: Record<OrderStatus, OrderStatus[]> = {
-  pedido: ['pago', 'produzindo', 'cancelado'],
-  pago: [],
-  produzindo: ['pronto', 'cancelado'],
-  pronto: ['entregue', 'cancelado'],
-  entregue: [],
+  agendado: ['finalizado', 'cancelado'],
+  finalizado: [],
   cancelado: [],
 }
 

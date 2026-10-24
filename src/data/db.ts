@@ -3,11 +3,8 @@ import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite'
 import init from './migrations/001_init.sql?raw'
 import phase1 from './migrations/002_phase1_fields.sql?raw'
 import phase1b from './migrations/003_variant_volume.sql?raw'
-import phase1c from './migrations/004_demo_seed_cost.sql?raw'
 import phase1d from './migrations/005_config_sync_timestamp.sql?raw'
-import phase1e from './migrations/006_stable_demo_ids.sql?raw'
 import phases2to4 from './migrations/007_phase2_4.sql?raw'
-import clearDemoData from './migrations/008_remove_demo_data.sql?raw'
 
 const NOME = 'mzgestao'
 const sqlite = new SQLiteConnection(CapacitorSQLite)
@@ -53,6 +50,7 @@ async function abrir(): Promise<Db> {
     await sqlite.initWebStore()
   }
   const conn = await sqlite.createConnection(NOME, false, 'no-encryption', 1, false)
+  if (web) await conn.delete()
   await conn.open()
   await conn.execute('PRAGMA foreign_keys = ON')
 
@@ -89,12 +87,9 @@ async function abrir(): Promise<Db> {
     }
     await conn.run('INSERT INTO _migracoes (versao) VALUES (3)', [], false)
   }
-  const feita4 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 4')
-  if (!feita4.values?.length) {
-    const sql = phase1c.split('\n').filter((l) => !l.startsWith('--') && l.trim()).join('\n')
-    await conn.execute(sql)
-    await conn.run('INSERT INTO _migracoes (versao) VALUES (4)', [], false)
-  }
+  // Migration scripts 004, 006, 008 and 009 were removed from the project.
+  // Versions 4 and 6 only changed demo rows; 8 cleared demo rows. The web
+  // database is recreated empty, so those data-only migrations are unnecessary.
   const feita5 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 5')
   if (!feita5.values?.length) {
     const cols = await conn.query('PRAGMA table_info(config)')
@@ -103,12 +98,6 @@ async function abrir(): Promise<Db> {
       await conn.execute(sql)
     }
     await conn.run('INSERT INTO _migracoes (versao) VALUES (5)', [], false)
-  }
-  const feita6 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 6')
-  if (!feita6.values?.length) {
-    const sql = phase1e.split('\n').filter((l) => !l.startsWith('--') && l.trim()).join('\n')
-    await conn.execute(sql)
-    await conn.run('INSERT INTO _migracoes (versao) VALUES (6)', [], false)
   }
   const feita7 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 7')
   if (!feita7.values?.length) {
@@ -134,14 +123,8 @@ async function abrir(): Promise<Db> {
   if (!(variantColumns.values ?? []).some((c: { name: string }) => c.name === 'estoque_minimo')) {
     await conn.execute('ALTER TABLE produto_variante ADD COLUMN estoque_minimo REAL NOT NULL DEFAULT 0')
   }
-  const feita8 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 8')
-  if (!feita8.values?.length) {
-    const sql = clearDemoData.split('\n').filter((l) => !l.startsWith('--') && l.trim()).join('\n')
-    await conn.execute(sql)
-    await conn.run('INSERT INTO _migracoes (versao) VALUES (8)', [], false)
-  }
   let emTransacao = false
-  const persistir = async () => { if (web && !emTransacao) await sqlite.saveToStore(NOME) }
+  const persistir = async () => { /* Spreadsheet is the persistent store. */ }
   const db: Db = {
     async query<T>(sql: string, params: unknown[] = []) {
       return ((await conn.query(sql, params as any[])).values ?? []) as T[]
@@ -169,6 +152,5 @@ async function abrir(): Promise<Db> {
       notifyDatabaseChanged()
     },
   }
-  await persistir()
   return db
 }

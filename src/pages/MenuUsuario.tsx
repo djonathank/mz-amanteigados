@@ -2,9 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import { Link, useNavigate } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
 import { useGoogleSync } from '../data/GoogleSyncContext'
-import { exportarBackup, importarBackup, validarBackup, type BackupValidation } from '../data/backup'
 import { lerConfig, salvarConfig } from '../data/repos'
-import { AVATAR_DEFAULT, AVATAR_STORAGE_KEY, carregarAvatar } from './avatar'
+import { AVATAR_DEFAULT, carregarAvatar } from './avatar'
 
 export default function MenuUsuario() {
   const db = useDb()
@@ -18,10 +17,6 @@ export default function MenuUsuario() {
   const [avatar, setAvatar] = useState(carregarAvatar)
   const [salvandoAvatar, setSalvandoAvatar] = useState(false)
   const seletorImagem = useRef<HTMLInputElement>(null)
-  const seletorBackup = useRef<HTMLInputElement>(null)
-  const [backupValidacao, setBackupValidacao] = useState<BackupValidation | null>(null)
-  const [backupTexto, setBackupTexto] = useState('')
-  const [processandoBackup, setProcessandoBackup] = useState(false)
 
   useEffect(() => {
     let ativo = true
@@ -61,7 +56,7 @@ export default function MenuUsuario() {
     setErro('')
     try {
       await google.desconectar()
-      navigate('/primeiro-acesso', { replace: true })
+      navigate('/', { replace: true })
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
@@ -117,9 +112,8 @@ export default function MenuUsuario() {
         canvas.height,
       )
       const imagemRedimensionada = canvas.toDataURL('image/jpeg', 0.82)
-      localStorage.setItem(AVATAR_STORAGE_KEY, imagemRedimensionada)
       setAvatar(imagemRedimensionada)
-      setMensagem('Imagem do avatar atualizada neste aparelho.')
+      setMensagem('Imagem do avatar atualizada até o fim desta sessão.')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     } finally {
@@ -129,76 +123,11 @@ export default function MenuUsuario() {
 
   const restaurarAvatar = () => {
     try {
-      localStorage.removeItem(AVATAR_STORAGE_KEY)
       setAvatar(AVATAR_DEFAULT)
       setMensagem('Imagem padrão restaurada.')
       setErro('')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  const baixarBackup = async () => {
-    setErro('')
-    setMensagem('')
-    setProcessandoBackup(true)
-    try {
-      const conteudo = await exportarBackup(db)
-      const url = URL.createObjectURL(new Blob([conteudo], { type: 'application/json' }))
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `mz-gestao-backup-${new Date().toISOString().slice(0, 10)}.json`
-      link.click()
-      URL.revokeObjectURL(url)
-      setMensagem('Backup JSON exportado. Guarde o arquivo em um local seguro.')
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : String(error))
-    } finally {
-      setProcessandoBackup(false)
-    }
-  }
-
-  const selecionarBackup = async (event: ChangeEvent<HTMLInputElement>) => {
-    const arquivo = event.currentTarget.files?.[0]
-    event.currentTarget.value = ''
-    setBackupValidacao(null)
-    setBackupTexto('')
-    setErro('')
-    setMensagem('')
-    if (!arquivo) return
-    if (!arquivo.name.toLowerCase().endsWith('.json') && arquivo.type !== 'application/json') {
-      setErro('Selecione um arquivo de backup JSON.')
-      return
-    }
-    setProcessandoBackup(true)
-    try {
-      const texto = await arquivo.text()
-      const validacao = await validarBackup(db, texto)
-      setBackupTexto(texto)
-      setBackupValidacao(validacao)
-      if (!validacao.valido) setErro(validacao.erros.join('; '))
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : String(error))
-    } finally {
-      setProcessandoBackup(false)
-    }
-  }
-
-  const restaurarBackup = async () => {
-    if (!backupValidacao?.valido || !backupTexto) return
-    if (!window.confirm('A restauração substituirá os dados locais atuais. Essa ação não pode ser desfeita. Deseja continuar?')) return
-    setErro('')
-    setMensagem('')
-    setProcessandoBackup(true)
-    try {
-      const total = await importarBackup(db, backupTexto)
-      setBackupValidacao(null)
-      setBackupTexto('')
-      setMensagem(`Backup restaurado: ${total} registro(s).`)
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : String(error))
-    } finally {
-      setProcessandoBackup(false)
     }
   }
 
@@ -269,48 +198,6 @@ export default function MenuUsuario() {
         {mensagem && <p className="notice success" role="status">{mensagem}</p>}
       </section>
 
-      {/* <section className="cd" aria-labelledby="backup-title">
-        <h2 id="backup-title">Backup local</h2>
-        <p className="sb">Exporte seus dados em JSON ou restaure um arquivo de backup neste aparelho.</p>
-        <div className="backup-actions">
-          <button className="bt o" type="button" disabled={processandoBackup} onClick={() => void baixarBackup()} data-testid="backup.exportar">
-            {processandoBackup ? 'Processando...' : 'Exportar backup JSON'}
-          </button>
-          <button className="bt o" type="button" disabled={processandoBackup} onClick={() => seletorBackup.current?.click()} data-testid="backup.selecionar">
-            Selecionar backup para restaurar
-          </button>
-        </div>
-        <input
-          ref={seletorBackup}
-          className="avatar-file-input"
-          type="file"
-          accept="application/json,.json"
-          aria-label="Selecionar arquivo de backup JSON"
-          data-testid="backup.arquivo"
-          onChange={(event) => void selecionarBackup(event)}
-        />
-        {backupValidacao && (
-          <div className={`notice ${backupValidacao.valido ? 'success' : 'error'}`} data-testid="backup.previsualizacao">
-            <p>{backupValidacao.valido
-              ? `Arquivo válido: ${backupValidacao.totalRegistros} registro(s) para restaurar.`
-              : 'O arquivo não passou na validação.'}</p>
-            {backupValidacao.valido && (
-              <>
-                <ul className="backup-counts">
-                  {Object.entries(backupValidacao.contagemPorTabela)
-                    .filter(([, total]) => total)
-                    .map(([tabela, total]) => <li key={tabela}>{tabela}: {total}</li>)}
-                </ul>
-                <button className="bt" type="button" disabled={processandoBackup} onClick={() => void restaurarBackup()} data-testid="backup.restaurar">
-                  Restaurar backup
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        <p className="helper">A restauração substitui os dados locais. Mantenha uma cópia segura do arquivo antes de restaurar.</p>
-      </section> */}
-
       <section className="cd" aria-labelledby="google-sync-title">
         <h2 id="google-sync-title">Conta Google e sincronização</h2>
         <p className="sb">
@@ -346,7 +233,7 @@ export default function MenuUsuario() {
         </div>
         <p className="helper">
           {google.email
-            ? 'A conta Google é obrigatória para acessar o aplicativo. Os dados também ficam salvos neste aparelho.'
+            ? 'A planilha Google é o armazenamento permanente. O app usa dados temporários apenas durante esta sessão.'
             : 'Entre com uma conta Google para acessar e sincronizar seus dados.'}
         </p>
       </section>

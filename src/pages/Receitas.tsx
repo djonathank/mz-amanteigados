@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
 import {
   buscarReceita, excluirReceita, lerConfig, listarInsumos, listarReceitas, salvarReceita, todosItens,
   type InsumoRow, type ItemRow, type ReceitaItemInput, type ReceitaRow,
 } from '../data/repos'
 import { custoPorUnidade, type Base } from '../data/calculos'
-import { ingredientsCost, recipeBatchCost, usableUnits } from '../domain/cost'
+import { recipeBatchCost } from '../domain/cost'
 import { formatBRL } from '../domain/money'
 import type { Receita } from '../domain/types'
-import { AlertaConclusao, Campo, focarCampo, Icon, Selecao } from './ui'
+import { AlertaConclusao, Campo, FecharModal, focarCampo, Icon, Selecao } from './ui'
 
 interface Linha {
   tipo: 'insumo' | 'subreceita'
@@ -54,6 +54,8 @@ function construirReceita(
 
 export default function Receitas() {
   const db = useDb()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [insumos, setInsumos] = useState<InsumoRow[]>([])
   const [receitas, setReceitas] = useState<ReceitaRow[]>([])
   const [itens, setItens] = useState<ItemRow[]>([])
@@ -71,6 +73,8 @@ export default function Receitas() {
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [formAberto, setFormAberto] = useState(false)
+  const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(async () => {
     const [listaInsumos, listaReceitas, listaItens, configuracao] = await Promise.all([
@@ -84,6 +88,7 @@ export default function Receitas() {
   useEffect(() => {
     void carregar().catch((e) => setErro(e instanceof Error ? e.message : String(e))).finally(() => setCarregando(false))
   }, [carregar])
+  useEffect(() => { if (location.hash === '#receita-form') setFormAberto(true) }, [location.hash])
 
   const custos = useMemo(() => Object.fromEntries(insumos.map((i) => [i.id, i.custo_medio])), [insumos])
   const opcoesInsumo = insumos.map((i) => [i.id, `${i.nome} (${i.unidade_base})`] as [string, string])
@@ -134,6 +139,8 @@ export default function Receitas() {
     && linhas.length > 0 && !erroCalculo
 
   const limpar = () => {
+    setFormAberto(false)
+    if (location.hash === '#receita-form') navigate(`${location.pathname}${location.search}`, { replace: true })
     setEditando(null)
     setNome('')
     setRend('')
@@ -149,6 +156,7 @@ export default function Receitas() {
   }
 
   const editar = async (id: string) => {
+    setFormAberto(true)
     try {
       const selecionada = await buscarReceita(db, id)
       if (!selecionada) throw new Error('A receita que você tentou editar não foi encontrada.')
@@ -188,8 +196,10 @@ export default function Receitas() {
   }
 
   const salvar = async () => {
-    if (!valido) return
+    if (!valido || salvando) return
     const atualizando = Boolean(editando)
+    setSalvando(true)
+    setErro('')
     try {
       const inputs: ReceitaItemInput[] = linhas.map((linha) => ({
         ...(linha.tipo === 'insumo' ? { insumoId: linha.id } : { subreceitaId: linha.id }),
@@ -206,11 +216,18 @@ export default function Receitas() {
         passosPreparo: [],
         itens: inputs,
       })
-      limpar()
-      setAviso(atualizando ? 'Receita atualizada.' : 'Receita salva.')
-      await carregar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
+      return
+    } finally {
+      setSalvando(false)
+    }
+    limpar()
+    setAviso(atualizando ? 'Receita atualizada.' : 'Receita salva.')
+    try {
+      await carregar()
+    } catch (e) {
+      setErro(`Receita salva, mas não foi possível atualizar a lista: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -230,11 +247,11 @@ export default function Receitas() {
     <>
       <AlertaConclusao mensagem={aviso} onConcluir={() => setAviso('')} />
       <h1>Receitas</h1>
-      <p className="sb">Fichas técnicas, preparo e custo completo da produção</p>
+      <p className="sb">Fichas técnicas, modo de preparo e custos das receitas</p>
       <div className="cd">
-        <h2>Suas fichas técnicas</h2>
+        <div className="section-heading"><h2>Suas fichas técnicas</h2></div>
         {carregando && <p className="notice" role="status">Carregando receitas...</p>}
-        {!carregando && receitas.length === 0 && <p className="notice">Nenhuma receita ainda. Monte a primeira abaixo.</p>}
+        {!carregando && receitas.length === 0 && <p className="notice">Nenhuma receita cadastrada.</p>}
         {!carregando && receitas.map((recipe) => {
           let custo = 0
           let avisoCusto = ''
@@ -251,7 +268,7 @@ export default function Receitas() {
           return (
             <div className="r" key={recipe.id} data-testid="receita.item">
               <span className="ic" aria-hidden="true"><Icon name="recipe" /></span>
-              <div>{recipe.nome}<small>{avisoCusto || `${formatBRL(custo * recipe.rendimento_qtd * (1 - recipe.perda_pct))} por lote · ${formatarCustoUnitario(custo, recipe.rendimento_unidade)}`}</small></div>
+              <div>{recipe.nome}<small>{avisoCusto || `${formatBRL(custo * recipe.rendimento_qtd * (1 - recipe.perda_pct))} por receita · ${formatarCustoUnitario(custo, recipe.rendimento_unidade)}`}</small></div>
               <div className="row-actions">
                 <Link className="lk" to={`/precificacao?receita=${recipe.id}&pacotes=${saida}`}>Precificar</Link>
                 <button className="lk icon-action" aria-label={`Editar ${recipe.nome}`} onClick={() => editar(recipe.id)}><Icon name="edit" /></button>
@@ -261,8 +278,9 @@ export default function Receitas() {
           )
         })}
       </div>
-      <div className="cd" id="receita-form">
-        <h2>{editando ? 'Editar receita' : 'Nova receita'}</h2>
+      {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) limpar() }}><section className="add-dialog form-dialog" id="receita-form" role="dialog" aria-modal="true" aria-labelledby="receita-form-title">
+        <FecharModal onClick={limpar} />
+        <h2 id="receita-form-title">{editando ? 'Editar receita' : 'Nova receita'}</h2>
         {erro && <p className="notice error" role="alert">{erro}</p>}
         <Campo rotulo="Nome da receita" id="receita.nome" valor={nome} onChange={setNome} placeholder="Ex.: massa amanteigada" />
         <div className="g">
@@ -295,16 +313,16 @@ export default function Receitas() {
         </div>
         {linhas.length > 0 && rendimentoUtil > 0 && !!unidade && perda.trim() !== '' && !erroCalculo && (
           <div className="cost-summary">
-            <div><small>Custo por lote</small><b>{formatBRL(custoLote)}</b></div>
+            <div><small>Custo total da receita</small><b>{formatBRL(custoLote)}</b></div>
             <div><small>Custo por {unidade}</small><b>{formatBRL(custoPorSaida)}</b></div>
           </div>
         )}
         {erroCalculo && <p className="notice error">{erroCalculo}</p>}
-        <button className="bt" disabled={!valido} data-testid="receita.salvar" onClick={salvar}>
-          {editando ? 'Salvar alterações' : 'Salvar receita'}
+        <button className="bt" disabled={!valido || salvando} data-testid="receita.salvar" onClick={salvar}>
+          {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar receita'}
         </button>
         {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
-      </div>
+      </section></div>}
     </>
   )
 }

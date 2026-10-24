@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
-import { carregarBase, custoDaVariante, custoPorUnidade, type Base } from '../data/calculos'
+import { carregarBase, custoPorUnidade, type Base } from '../data/calculos'
 import { excluirProduto, salvarProduto, type VarianteRow } from '../data/repos'
 import { formatBRL } from '../domain/money'
-import { realMargin, suggestedPrice } from '../domain/pricing'
-import { ajustarEstoque, definirEstoqueMinimoVariante } from '../data/phase2'
-import { AlertaConclusao, Campo, focarCampo, Icon, Selecao } from './ui'
+import { suggestedPrice } from '../domain/pricing'
+import { ajustarEstoque } from '../data/phase2'
+import { AlertaConclusao, Campo, FecharModal, focarCampo, Icon, Selecao } from './ui'
 
 interface Linha {
   id?: string
@@ -27,6 +27,8 @@ const opcoesInsumo = (base: Base, tipos: string[]) => [
 
 export default function Produtos() {
   const db = useDb()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [base, setBase] = useState<Base | null>(null)
   const [nome, setNome] = useState('')
   const [rec, setRec] = useState('')
@@ -43,6 +45,9 @@ export default function Produtos() {
   const [erro, setErro] = useState('')
   const [confirmacao, setConfirmacao] = useState('')
   const [orientacao, setOrientacao] = useState('')
+  const [formAberto, setFormAberto] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [acoesEstoqueAbertas, setAcoesEstoqueAbertas] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     const b = await carregarBase(db)
@@ -51,6 +56,7 @@ export default function Produtos() {
   useEffect(() => {
     void carregar().catch((e) => setErro(e instanceof Error ? e.message : String(e)))
   }, [carregar])
+  useEffect(() => { if (location.hash === '#produto-form') setFormAberto(true) }, [location.hash])
   if (!base) return erro
     ? <p className="notice error" role="alert">{erro}</p>
     : <p className="notice" role="status">Carregando produtos...</p>
@@ -74,6 +80,8 @@ export default function Produtos() {
     : 0
 
   const limpar = () => {
+    setFormAberto(false)
+    if (location.hash === '#produto-form') navigate(`${location.pathname}${location.search}`, { replace: true })
     setNome('')
     setRec('')
     setLinhas([])
@@ -91,6 +99,7 @@ export default function Produtos() {
   }
 
   const editar = (produto: { id: string; nome: string; receitaId: string; variantes: VarianteRow[] }) => {
+    setFormAberto(true)
     const unidadeReceita = base?.receitas.find((recipe) => recipe.id === produto.receitaId)?.rendimento_unidade
     setEditando(produto.id)
     setNome(produto.nome)
@@ -121,17 +130,17 @@ export default function Produtos() {
   }
 
   const adicionar = () => {
-    const medidaValida = receita?.rendimento_unidade === 'g'
+    const medidaValida = Boolean(receita) && (receita?.rendimento_unidade === 'g'
       ? Number(peso) > 0
       : receita?.rendimento_unidade === 'ml'
         ? Number(volume) > 0
-        : Number.isInteger(Number(un)) && Number(un) > 0
+        : true)
     if (!vn.trim() || !medidaValida || !(Number(preco) > 0)) return
     const pesoNumero = Number(peso)
     const volumeNumero = Number(volume)
     const variante: Linha = {
       nome: vn.trim(),
-      unidades: Number(un),
+      unidades: Number.isInteger(Number(un)) && Number(un) > 0 ? Number(un) : 1,
       pesoG: receita?.rendimento_unidade === 'g' && pesoNumero > 0 ? pesoNumero : null,
       volumeMl: receita?.rendimento_unidade === 'ml' && volumeNumero > 0 ? volumeNumero : null,
       embalagemInsumoId: !embalagem || embalagem === NENHUM ? null : embalagem,
@@ -164,8 +173,10 @@ export default function Produtos() {
   }
 
   const salvar = async () => {
-    if (!nome.trim() || !rec || !linhas.length) return
+    if (!nome.trim() || !rec || !linhas.length || salvando) return
     const atualizando = Boolean(editando)
+    setSalvando(true)
+    setErro('')
     try {
       await salvarProduto(db, {
         id: editando ?? undefined,
@@ -173,11 +184,18 @@ export default function Produtos() {
         receitaId: rec,
         variantes: linhas,
       })
-      limpar()
-      setConfirmacao(atualizando ? 'Produto atualizado.' : 'Produto salvo.')
-      await carregar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
+      return
+    } finally {
+      setSalvando(false)
+    }
+    limpar()
+    setConfirmacao(atualizando ? 'Produto atualizado.' : 'Produto salvo.')
+    try {
+      await carregar()
+    } catch (e) {
+      setErro(`Produto salvo, mas não foi possível atualizar a lista: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -185,17 +203,13 @@ export default function Produtos() {
     v.produto_id,
     { id: v.produto_id, nome: v.produto_nome, receitaId: v.receita_id, variantes: base.variantes.filter((item) => item.produto_id === v.produto_id) },
   ])).values())
-  const quantidadeLabel = receita?.rendimento_unidade === 'g'
-    ? 'Peso da receita no pacote (g)'
-    : receita?.rendimento_unidade === 'ml'
-      ? 'Volume por pacote (ml)'
-      : 'Unidades por pacote'
-  const medidaValida = receita?.rendimento_unidade === 'g'
+  const medidaValida = Boolean(receita) && (receita?.rendimento_unidade === 'g'
     ? Number(peso) > 0
     : receita?.rendimento_unidade === 'ml'
       ? Number(volume) > 0
-      : Number.isInteger(Number(un)) && Number(un) > 0
+      : true)
   const ajustarVariante = async (variant: VarianteRow, perda = false) => {
+    setAcoesEstoqueAbertas(null)
     const value = window.prompt(`Saldo atual: ${variant.estoque_atual} pacote(s). Informe a quantidade ${perda ? 'perdida' : 'do ajuste'}:`)
     if (value === null) return
     const amount = Number(value.replace(',', '.'))
@@ -227,13 +241,16 @@ export default function Produtos() {
       <p className="sb">Ligue cada receita às embalagens, rótulos e preços</p>
       <div className="cd">
         <div className="section-heading"><h2>Seus produtos</h2><span className="pl">{produtos.length} cadastrados</span></div>
-        {!produtos.length && <p className="notice">Nenhum produto ainda. Cadastre a primeira receita e depois crie o produto.</p>}
+        {!produtos.length && <p className="notice">Nenhum produto cadastrado. Cadastre uma receita antes de criar produtos.</p>}
         {produtos.map((produto) => (
           <div className="product-row" key={produto.id}>
             <span className="ic" aria-hidden="true"><Icon name="box" /></span>
             <div className="product-row-content"><b>{produto.nome}</b>{produto.variantes.map((variant) => (
-              <small key={variant.id}>{variant.nome} · {formatBRL(variant.preco_cents)}</small>
+              <div className="variant-stock" key={variant.id}>
+                <small>{variant.nome} · {formatBRL(variant.preco_cents)} · saldo {variant.estoque_atual ?? 0}</small>
+              </div>
             ))}</div>
+            <div className="product-row-actions">
             <button className="lk icon-action" aria-label={`Editar ${produto.nome}`} onClick={() => editar(produto)}><Icon name="edit" /></button>
             <button className="lk icon-action" aria-label={`Excluir ${produto.nome}`} onClick={async () => {
               if (confirm(`Excluir "${produto.nome}" e suas variantes?`)) {
@@ -248,12 +265,32 @@ export default function Produtos() {
                 }
               }
             }}><Icon name="trash" /></button>
+            <button className="lk icon-action product-stock-toggle" type="button" aria-label={`Mais ações de estoque para ${produto.nome}`} title="Ações de estoque"
+              aria-expanded={acoesEstoqueAbertas === produto.id}
+              onClick={() => setAcoesEstoqueAbertas((aberta) => aberta === produto.id ? null : produto.id)}>
+              <Icon name="add" />
+            </button>
+            </div>
+            {acoesEstoqueAbertas === produto.id && <div className="stock-extra-actions product-stock-extra-actions">
+              {produto.variantes.map((variant) => <div className="product-stock-action-group" key={variant.id}>
+                <small>{variant.nome} · saldo {variant.estoque_atual ?? 0}</small>
+                <button className="stock-extra-action" type="button" aria-label={`Ajustar estoque de ${variant.nome}`} onClick={() => void ajustarVariante(variant)}>
+                  <span className="stock-extra-action-icon"><Icon name="stock" /></span>
+                  <span><b>Ajustar</b><small>Adicionar quantidade ao saldo</small></span>
+                </button>
+                <button className="stock-extra-action" type="button" aria-label={`Registrar perda de ${variant.nome}`} onClick={() => void ajustarVariante(variant, true)}>
+                  <span className="stock-extra-action-icon"><Icon name="trash" /></span>
+                  <span><b>Registrar perda</b><small>Descontar quantidade perdida</small></span>
+                </button>
+              </div>)}
+            </div>}
           </div>
         ))}
       </div>
       <AlertaConclusao mensagem={confirmacao} onConcluir={() => setConfirmacao('')} />
-      <div className="cd" id="produto-form">
-        <h2>{editando ? 'Editar produto' : 'Novo produto'}</h2>
+      {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) limpar() }}><section className="add-dialog form-dialog" id="produto-form" role="dialog" aria-modal="true" aria-labelledby="produto-form-title">
+        <FecharModal onClick={limpar} />
+        <h2 id="produto-form-title">{editando ? 'Editar produto' : 'Novo produto'}</h2>
         {erro && <p className="notice error" role="alert">{erro}</p>}
         <Campo rotulo="Nome do produto" id="produto.nome" valor={nome} onChange={setNome} placeholder="Ex.: bolacha amanteigada" />
         {base.receitas.length === 0
@@ -270,6 +307,7 @@ export default function Produtos() {
               setRotulo('')
               setOrientacao('Receita alterada. Recrie as variantes para manter o peso ou volume compatível.')
             }
+            setUn('1')
             setRec(id)
           }} opcoes={base.receitas.map((r) => [r.id, `${r.nome} · ${r.rendimento_qtd} ${r.rendimento_unidade}`])} />}
         {orientacao && <p className="notice" role="status">{orientacao}</p>}
@@ -294,9 +332,8 @@ export default function Produtos() {
         ))}
         <Campo rotulo="Nome da embalagem / variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote 150 g" />
         <div className="g">
-          <Campo rotulo={quantidadeLabel} id="produto.unidades" mascara={receita?.rendimento_unidade === 'un' ? 'inteiro' : 'quantidade'}
-            valor={receita?.rendimento_unidade === 'ml' ? volume : receita?.rendimento_unidade === 'g' ? peso : un}
-            onChange={receita?.rendimento_unidade === 'ml' ? setVolume : receita?.rendimento_unidade === 'g' ? setPeso : setUn} />
+          {receita?.rendimento_unidade === 'g' && <Campo rotulo="Peso da receita no pacote (g)" id="produto.peso" valor={peso} onChange={setPeso} mascara="quantidade" />}
+          {receita?.rendimento_unidade === 'ml' && <Campo rotulo="Volume da receita no pacote (ml)" id="produto.volume" valor={volume} onChange={setVolume} mascara="quantidade" />}
           <Campo rotulo="Preço de venda (R$)" id="produto.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
         </div>
         <div className="g">
@@ -309,11 +346,11 @@ export default function Produtos() {
           disabled={!vn.trim() || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
           {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
         </button>
-        <button className="bt" disabled={!nome.trim() || !rec || linhas.length === 0} data-testid="produto.salvar" onClick={salvar}>
-          {editando ? 'Salvar alterações' : 'Salvar produto'}
+        <button className="bt" disabled={!nome.trim() || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
+          {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar produto'}
         </button>
         {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
-      </div>
+      </section></div>}
     </>
   )
 }
