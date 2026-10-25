@@ -4,6 +4,9 @@ import { useDb } from '../data/DbContext'
 import { useGoogleSync } from '../data/GoogleSyncContext'
 import { lerConfig, salvarConfig } from '../data/repos'
 import { AVATAR_DEFAULT, carregarAvatar } from './avatar'
+import { ConfirmacaoAcao, MensagemModal } from './ui'
+
+const normalizarNomeUsuario = (valor: string) => valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 60)
 
 export default function MenuUsuario() {
   const db = useDb()
@@ -16,12 +19,21 @@ export default function MenuUsuario() {
   const [mensagem, setMensagem] = useState('')
   const [avatar, setAvatar] = useState(carregarAvatar)
   const [salvandoAvatar, setSalvandoAvatar] = useState(false)
+  const [confirmarReconexao, setConfirmarReconexao] = useState(false)
   const seletorImagem = useRef<HTMLInputElement>(null)
+  const nomeOriginal = useRef('')
+  const [erroGoogleFechado, setErroGoogleFechado] = useState('')
+
+  useEffect(() => setErroGoogleFechado(''), [google.erro])
 
   useEffect(() => {
     let ativo = true
     void lerConfig(db).then((config) => {
-      if (ativo) setNome(config.nome_usuario || google.nome || google.email.split('@')[0] || '')
+      if (ativo) {
+        const nomeCarregado = normalizarNomeUsuario(config.nome_usuario || google.nome || google.email.split('@')[0] || '')
+        nomeOriginal.current = nomeCarregado
+        setNome(nomeCarregado)
+      }
     }).catch((error) => {
       if (ativo) setErro(error instanceof Error ? error.message : String(error))
     }).finally(() => {
@@ -30,11 +42,17 @@ export default function MenuUsuario() {
     return () => { ativo = false }
   }, [db, google.email, google.nome])
 
+  useEffect(() => {
+    if (!mensagem) return
+    const timeout = window.setTimeout(() => setMensagem(''), 5000)
+    return () => window.clearTimeout(timeout)
+  }, [mensagem])
+
   const salvarNome = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const nomeSalvo = nome.trim()
-    if (!nomeSalvo) {
-      setErro('Informe um nome para continuar.')
+    if (nomeSalvo.length < 2 || nomeSalvo.length > 60 || normalizarNomeUsuario(nomeSalvo) !== nomeSalvo) {
+      setErro('O nome deve ter de 2 a 60 letras e espaços.')
       setMensagem('')
       return
     }
@@ -43,8 +61,9 @@ export default function MenuUsuario() {
     setSalvandoNome(true)
     try {
       await salvarConfig(db, { nome_usuario: nomeSalvo })
+      nomeOriginal.current = nomeSalvo
       setNome(nomeSalvo)
-      setMensagem('Nome atualizado.')
+      setMensagem('Nome atualizado com sucesso!')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     } finally {
@@ -56,7 +75,18 @@ export default function MenuUsuario() {
     setErro('')
     try {
       await google.desconectar()
-      navigate('/', { replace: true })
+      navigate('/login', { replace: true, state: { login: true } })
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const reconectar = async () => {
+    setConfirmarReconexao(false)
+    setErro('')
+    try {
+      await google.reconectar()
+      setMensagem('Dados locais atualizados pela planilha.')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
@@ -163,22 +193,23 @@ export default function MenuUsuario() {
           onChange={(event) => void alterarAvatar(event)}
         />
         <div className="avatar-actions">
-          <button className="bt o" type="button" disabled={salvandoAvatar} onClick={() => seletorImagem.current?.click()}>
+          {/* <button className="bt o" type="button" disabled={salvandoAvatar} onClick={() => seletorImagem.current?.click()}>
             {salvandoAvatar ? 'Atualizando imagem...' : 'Escolher imagem'}
-          </button>
+          </button> */}
           {avatar !== AVATAR_DEFAULT && (
             <button className="bt o" type="button" disabled={salvandoAvatar} onClick={restaurarAvatar}>
               Restaurar imagem padrão
             </button>
           )}
         </div>
-        <form onSubmit={(event) => void salvarNome(event)}>
+        <form className="profile-name-form" onSubmit={(event) => void salvarNome(event)}>
           <label className="fl" htmlFor="nome-usuario">
             <small>Nome do usuário</small>
             <input
               id="nome-usuario"
               type="text"
               autoComplete="name"
+              minLength={2}
               maxLength={60}
               required
               value={nome}
@@ -186,16 +217,18 @@ export default function MenuUsuario() {
               placeholder="Como gostaria de ser chamado?"
               data-testid="perfil.nome"
               onChange={(event) => {
-                setNome(event.currentTarget.value)
+                setNome(normalizarNomeUsuario(event.currentTarget.value))
                 setMensagem('')
+                setErro('')
               }}
             />
           </label>
-          <button className="bt" type="submit" disabled={carregandoPerfil || salvandoNome} data-testid="perfil.salvar-nome">
-            {salvandoNome ? 'Salvando...' : 'Salvar nome'}
+          <button className="bt" type="submit"
+            disabled={carregandoPerfil || salvandoNome || nome.trim().length < 2 || nome.trim() === nomeOriginal.current}
+            data-testid="perfil.salvar-nome">
+            {salvandoNome ? 'Salvando...' : 'Salvar'}
           </button>
         </form>
-        {mensagem && <p className="notice success" role="status">{mensagem}</p>}
       </section>
 
       <section className="cd" aria-labelledby="google-sync-title">
@@ -205,7 +238,6 @@ export default function MenuUsuario() {
             ? `Conectado como ${google.email}. Seus dados são sincronizados com uma planilha no seu Google Drive.`
             : 'Conecte sua conta Google para criar uma planilha no seu Drive e sincronizar seus dados entre aparelhos conectados à mesma conta.'}
         </p>
-        {(erro || google.erro) && <p className="notice error" role="alert">{erro || google.erro}</p>}
         {google.sincronizadoEm && <p className="notice success" role="status">Última sincronização: {new Date(google.sincronizadoEm).toLocaleString('pt-BR')}</p>}
         <div className="g">
           {!google.email ? (
@@ -214,8 +246,8 @@ export default function MenuUsuario() {
             </button>
           ) : (
             <>
-              <button className="bt o" disabled={google.sincronizando} data-testid="google.reconectar" onClick={() => void google.conectar().catch(() => undefined)}>
-                Reconectar conta Google
+              <button className="bt o" disabled={google.sincronizando} data-testid="google.reconectar" onClick={() => setConfirmarReconexao(true)}>
+                Reconectar e baixar dados da planilha
               </button>
               <button className="bt" disabled={google.sincronizando} data-testid="google.sincronizar" onClick={() => void google.sincronizarAgora().catch(() => undefined)}>
                 {google.sincronizando ? 'Sincronizando...' : 'Sincronizar agora'}
@@ -233,10 +265,21 @@ export default function MenuUsuario() {
         </div>
         <p className="helper">
           {google.email
-            ? 'A planilha Google é o armazenamento permanente. O app usa dados temporários apenas durante esta sessão.'
+            ? 'A planilha Google é o armazenamento permanente. Alterações offline são sincronizadas quando a conexão voltar. Reconectar substitui os dados locais pelos da planilha.'
             : 'Entre com uma conta Google para acessar e sincronizar seus dados.'}
         </p>
       </section>
+      {confirmarReconexao && <ConfirmacaoAcao
+        id="google-confirmar-reconexao"
+        titulo="Baixar os dados da planilha?"
+        mensagem="Os dados locais sincronizados deste aparelho serão substituídos pelos dados atuais da planilha. Alterações offline ainda não sincronizadas serão perdidas."
+        confirmar="Baixar dados"
+        onCancelar={() => setConfirmarReconexao(false)}
+        onConfirmar={() => void reconectar()}
+      />}
+      <MensagemModal tipo="sucesso" mensagem={!erro && !google.erro ? mensagem : ''} onFechar={() => setMensagem('')} />
+      <MensagemModal tipo="erro" mensagem={erro || (google.erro === erroGoogleFechado ? '' : google.erro)}
+        onFechar={() => { setErro(''); setErroGoogleFechado(google.erro) }} />
     </div>
   )
 }

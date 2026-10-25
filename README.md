@@ -44,9 +44,9 @@ O APK fica em `android/app/build/outputs/apk/debug/app-debug.apk`. Ele usa a cha
 
 ## Uso local e Google Sheets opcional
 
-O primeiro acesso pode ser feito **somente neste aparelho**, informando o nome do perfil. Não é necessário entrar com Google para usar as telas, registrar operações ou guardar dados locais. O SQLite local é a fonte dos dados exibidos; a sincronização Google é opcional e requer conexão à internet.
+No primeiro acesso, o app direciona para o login Google; enquanto prepara os dados, exibe o logo com um indicador de carregamento. O SQLite local mantém os dados usados no aparelho e a conta Google sincroniza esses dados com a planilha no Drive. Ao desconectar Google, os dados locais são apagados e o app volta para a tela de login. No Android, os dados do app não são restaurados por backup em uma nova instalação.
 
-No perfil, acessado pelo avatar na tela inicial, conecte uma conta Google para criar/localizar a planilha `MZ Gestão - Dados` no Drive dessa conta. Use a mesma conta nos aparelhos que devem compartilhar os dados. O app sincroniza após alterações locais (agrupadas por 1,5 s), quando a conexão volta e sob demanda. Registros são mesclados por chave e `updated_at`; saldos de estoque são reconstruídos pelos movimentos sincronizados. A edição manual da planilha não é suportada.
+No perfil, acessado pelo avatar na tela inicial, é possível reconectar e baixar dados da planilha `MZ Gestão - Dados`, sincronizar sob demanda ou desconectar a conta. Use a mesma conta nos aparelhos que devem compartilhar os dados. O app sincroniza após alterações locais (agrupadas por 1,5 s), quando a conexão volta e sob demanda. Registros são mesclados por chave e `updated_at`; saldos de estoque são reconstruídos pelos movimentos sincronizados. A edição manual da planilha não é suportada.
 
 Para habilitar o OAuth e a sincronização:
 

@@ -7,6 +7,8 @@ const FACTORS: Record<Unit, [BaseUnit, number]> = {
 
 export const baseOf = (u: Unit): BaseUnit => FACTORS[u][0]
 export const toBase = (qty: number, u: Unit): number => qty * FACTORS[u][1]
+const quantityFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 })
+export const formatQuantity = (quantity: number): string => quantityFormatter.format(quantity)
 
 /** Custo (em centavos) por unidade base, a partir do total pago numa compra. */
 export const costPerBase = (totalCents: number, qty: number, u: Unit): number => {

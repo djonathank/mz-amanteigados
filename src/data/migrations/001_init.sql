@@ -4,7 +4,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE insumo (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'ingrediente', unidade_base TEXT NOT NULL, unidade_compra TEXT, fator_compra REAL DEFAULT 1, custo_medio REAL NOT NULL DEFAULT 0, estoque_atual REAL NOT NULL DEFAULT 0, estoque_minimo REAL NOT NULL DEFAULT 0, alergenos TEXT, nutricional TEXT, fornecedor_id TEXT, ativo INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
+  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT, quantidade_cadastro REAL
 );
 CREATE TABLE fornecedor (
   id TEXT PRIMARY KEY,
@@ -57,16 +57,6 @@ CREATE TABLE movimento_estoque (
   item_tipo TEXT NOT NULL, item_id TEXT NOT NULL, tipo TEXT NOT NULL, quantidade REAL NOT NULL, custo_unit REAL, origem_id TEXT, data TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
 );
-CREATE TABLE lote (
-  id TEXT PRIMARY KEY,
-  codigo TEXT NOT NULL, receita_id TEXT NOT NULL REFERENCES receita(id), data_fabricacao TEXT NOT NULL, data_validade TEXT, qtd_prevista REAL, qtd_real REAL, custo_total_cents INTEGER,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
-);
-CREATE TABLE lote_saida (
-  id TEXT PRIMARY KEY,
-  lote_id TEXT NOT NULL REFERENCES lote(id), variante_id TEXT NOT NULL REFERENCES produto_variante(id), quantidade_pacotes INTEGER NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
-);
 CREATE TABLE venda (
   id TEXT PRIMARY KEY,
   cliente_id TEXT, encomenda_id TEXT, data TEXT NOT NULL, desconto_cents INTEGER NOT NULL DEFAULT 0, total_cents INTEGER NOT NULL, forma_pagamento TEXT NOT NULL, status_pagamento TEXT NOT NULL DEFAULT 'pago', tabela_preco_id TEXT,
@@ -79,7 +69,7 @@ CREATE TABLE venda_item (
 );
 CREATE TABLE encomenda (
   id TEXT PRIMARY KEY,
-  cliente_id TEXT, data_entrega TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pedido', sinal_cents INTEGER NOT NULL DEFAULT 0, total_cents INTEGER NOT NULL, observacoes TEXT,
+  cliente_id TEXT, data_entrega TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pedido', total_cents INTEGER NOT NULL, observacoes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
 );
 CREATE TABLE encomenda_item (
@@ -92,12 +82,4 @@ CREATE TABLE lancamento (
   tipo TEXT NOT NULL, categoria TEXT, valor_cents INTEGER NOT NULL, data TEXT NOT NULL, vencimento TEXT, pago INTEGER NOT NULL DEFAULT 1, negocio INTEGER NOT NULL DEFAULT 1, origem_tipo TEXT, origem_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
 );
-CREATE TABLE sync_outbox (
-  id TEXT PRIMARY KEY,
-  tabela TEXT NOT NULL, registro_id TEXT NOT NULL, operacao TEXT NOT NULL, payload TEXT, tentativas INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
-);
-
 CREATE TABLE config (chave TEXT PRIMARY KEY, valor TEXT);
-CREATE TABLE sync_state (tabela TEXT PRIMARY KEY, ultimo_pull TEXT, ultimo_push TEXT, max_updated_at_remoto TEXT);
-CREATE TABLE sheet_row_map (tabela TEXT NOT NULL, registro_id TEXT NOT NULL, linha INTEGER NOT NULL, PRIMARY KEY (tabela, registro_id));

@@ -1,11 +1,14 @@
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 import { DbProvider, useDb } from './data/DbContext'
 import { GoogleSyncProvider } from './data/GoogleSyncContext'
 import { lerConfig } from './data/repos'
 import Comprovante from './pages/Comprovante'
 import Compra from './pages/Compra'
 import Custos from './pages/Custos'
+import Categorias from './pages/Categorias'
 import Insumos from './pages/Insumos'
 import Inicio from './pages/Inicio'
 import Mais from './pages/Mais'
@@ -14,10 +17,11 @@ import Produtos from './pages/Produtos'
 import Receitas from './pages/Receitas'
 import { Icon } from './pages/ui'
 import Vender from './pages/Vender'
-import PrimeiroAcesso from './pages/PrimeiroAcesso'
+import Login from './pages/Login'
 import MenuUsuario from './pages/MenuUsuario'
 import Relatorios from './pages/Relatorios'
 import Gestao from './pages/Gestao'
+import AppLoading from './AppLoading'
 
 const tabs = [
   ['/', 'Início', 'home'],
@@ -37,7 +41,7 @@ function destinoCadastro(pathname: string): string {
   if (pathname === '/clientes' || pathname === '/fornecedores') return `${pathname}#${pathname.slice(1)}-form`
   if (pathname === '/encomendas') return '/vender'
   if (pathname === '/financeiro') return '/financeiro#financeiro-form'
-  if (['/mais', '/menu', '/relatorios', '/custos', '/precificacao'].includes(pathname)) return '/vender'
+  if (['/mais', '/menu', '/relatorios', '/custos', '/categorias', '/precificacao'].includes(pathname)) return '/vender'
   return pathname
 }
 
@@ -45,7 +49,6 @@ function Navegacao() {
   const location = useLocation()
   const navigate = useNavigate()
   const { pathname } = location
-  const [cadastroAberto, setCadastroAberto] = useState(false)
 
   useEffect(() => {
     if (!location.hash) return
@@ -54,8 +57,6 @@ function Navegacao() {
     })
     return () => window.cancelAnimationFrame(frame)
   }, [location.hash, pathname])
-
-  useEffect(() => { setCadastroAberto(false) }, [pathname, location.hash])
 
   const abrirCadastro = () => {
     if (pathname === '/estoque') {
@@ -69,65 +70,47 @@ function Navegacao() {
     navigate(destinoCadastro(pathname))
   }
 
-  const telaComOpcoesDeCadastro = pathname === '/estoque'
-
   return (
-    <>
-      <nav className="nv" aria-label="Navegação principal">
-        {tabs.map(([path, label, icon]) => {
-          if (path === '/vender') {
-            const vendaAtiva = pathname === '/vender' || pathname.startsWith('/venda/')
-            return (
-              <button
-                key={path}
-                type="button"
-                className={`nav-add${vendaAtiva ? ' active' : ''}`}
-                aria-label="Criar novo"
-                data-testid="nav.add"
-                aria-expanded={telaComOpcoesDeCadastro && cadastroAberto}
-                onClick={() => {
-                  if (telaComOpcoesDeCadastro) setCadastroAberto((aberto) => !aberto)
-                  else abrirCadastro()
-                }}
-              />
-            )
-          }
-
-          const utilitario = label === 'Mais' && [
-            '/mais', '/menu', '/produtos', '/compra', '/custos', '/precificacao',
-            '/planejamento', '/relatorios', '/clientes', '/fornecedores', '/encomendas', '/financeiro',
-          ].includes(pathname)
+    <nav className="nv" aria-label="Navegação principal">
+      {tabs.map(([path, label, icon]) => {
+        if (path === '/vender') {
+          const vendaAtiva = pathname === '/vender' || pathname.startsWith('/venda/')
           return (
-            <NavLink
+            <button
               key={path}
-              to={path}
-              end
-              className={({ isActive }) => isActive || utilitario ? 'active' : undefined}
-              onClick={(event) => {
-                if (path === '/mais' && pathname === '/mais') {
-                  event.preventDefault()
-                  window.scrollTo(0, 0)
-                }
-              }}
-              data-testid={`nav.${label.toLowerCase()}`}
-            >
-              <span className="nav-icon"><Icon name={icon} size={19} /></span>
-              <span className="nav-label">{label}</span>
-            </NavLink>
+              type="button"
+              className={`nav-add${vendaAtiva ? ' active' : ''}`}
+              aria-label="Criar novo"
+              data-testid="nav.add"
+              onClick={abrirCadastro}
+            />
           )
-        })}
-      </nav>
-      {pathname === '/estoque' && cadastroAberto && <div className="stock-add-menu" role="menu" aria-label="Ações de insumo">
-        <button type="button" role="menuitem" onClick={abrirCadastro}>
-          <span className="stock-extra-action-icon"><Icon name="add" /></span>
-          <span><b>Cadastrar insumo</b><small>Adicionar ingrediente, embalagem ou rótulo</small></span>
-        </button>
-        <button type="button" role="menuitem" onClick={() => { setCadastroAberto(false); navigate('/compra#compra-form') }}>
-          <span className="stock-extra-action-icon"><Icon name="box" /></span>
-          <span><b>Registrar compra</b><small>Adicionar uma compra de insumos</small></span>
-        </button>
-      </div>}
-    </>
+        }
+
+        const utilitario = label === 'Mais' && [
+          '/mais', '/menu', '/produtos', '/compra', '/custos', '/precificacao',
+          '/planejamento', '/relatorios', '/clientes', '/fornecedores', '/encomendas', '/financeiro', '/categorias',
+        ].includes(pathname)
+        return (
+          <NavLink
+            key={path}
+            to={path}
+            end
+            className={({ isActive }) => isActive || utilitario ? 'active' : undefined}
+            onClick={(event) => {
+              if (path === '/mais' && pathname === '/mais') {
+                event.preventDefault()
+                window.scrollTo(0, 0)
+              }
+            }}
+            data-testid={`nav.${label.toLowerCase()}`}
+          >
+            <span className="nav-icon"><Icon name={icon} size={19} /></span>
+            <span className="nav-label">{label}</span>
+          </NavLink>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -147,6 +130,39 @@ function Rotas() {
   const location = useLocation()
   const db = useDb()
   const [perfil, setPerfil] = useState<string | null>(null)
+  const loginForcado = Boolean(
+    location.state
+      && typeof location.state === 'object'
+      && 'login' in location.state
+      && location.state.login === true,
+  )
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    let ativo = true
+    let removerListener: (() => void) | null = null
+    void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      const indiceHistorico = window.history.state?.idx
+      if (canGoBack || (typeof indiceHistorico === 'number' && indiceHistorico > 0)) {
+        window.history.back()
+        return
+      }
+      void CapacitorApp.exitApp().catch((error: unknown) => {
+        console.error('Não foi possível fechar o aplicativo pelo botão Voltar.', error)
+      })
+    }).then((listener) => {
+      if (ativo) removerListener = () => { void listener.remove() }
+      else void listener.remove()
+    }).catch((error: unknown) => {
+      console.error('Não foi possível registrar o botão Voltar do Android.', error)
+    })
+
+    return () => {
+      ativo = false
+      removerListener?.()
+    }
+  }, [])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -163,16 +179,17 @@ function Rotas() {
     return () => { ativo = false }
   }, [db, location.pathname])
 
-  if (perfil === null) return <p className="sb">Preparando seu espaço...</p>
-  const precisaConfigurarPerfil = !perfil
-  if (precisaConfigurarPerfil && location.pathname !== '/primeiro-acesso') return <Navigate to="/primeiro-acesso" replace />
-  if (!precisaConfigurarPerfil && location.pathname === '/primeiro-acesso') return <Navigate to="/" replace />
+  if (perfil === null) return <AppLoading />
+  const precisaConfigurarPerfil = !perfil || loginForcado
+  if (precisaConfigurarPerfil && location.pathname !== '/login' && location.pathname !== '/primeiro-acesso') return <Navigate to="/login" replace />
+  if (!precisaConfigurarPerfil && location.pathname === '/login' && !loginForcado) return <Navigate to="/" replace />
 
   return (
     <div className={`phone${precisaConfigurarPerfil ? ' first-access-shell' : ''}${location.pathname === '/mais' ? ' more-shell' : ''}`}>
       <main>
         <Routes>
-          <Route path="/primeiro-acesso" element={<PrimeiroAcesso />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/primeiro-acesso" element={<Navigate to="/login" replace />} />
           <Route path="/" element={<Inicio />} />
           <Route path="/precificacao" element={<Precificacao />} />
           <Route path="/receitas" element={<Receitas />} />
@@ -191,6 +208,7 @@ function Rotas() {
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/compra" element={<Compra />} />
           <Route path="/custos" element={<Custos />} />
+          <Route path="/categorias" element={<Categorias />} />
         </Routes>
       </main>
       {!precisaConfigurarPerfil && <Navegacao />}

@@ -4,7 +4,7 @@ import { useDb } from '../data/DbContext'
 import { useGoogleSync } from '../data/GoogleSyncContext'
 import { salvarConfig } from '../data/repos'
 
-export default function PrimeiroAcesso() {
+export default function Login() {
   const db = useDb()
   const google = useGoogleSync()
   const navigate = useNavigate()
@@ -28,7 +28,7 @@ export default function PrimeiroAcesso() {
   return (
     <div className="first-access">
       <header className="first-access-brand">
-        <img className="home-avatar" src="/assets/mz-gestao-icon.svg" alt="MZ Gestão" />
+        <img className="home-avatar" src="/assets/logoapp.jpeg" alt="MZ Bolachas da Maquiele" />
         <p>Bem-vindo ao</p>
         <h1>MZ Gestão</h1>
         <span>Amanteigadas que Derretem na Boca</span>
@@ -37,7 +37,7 @@ export default function PrimeiroAcesso() {
         <p className="sb">Entre com sua conta Google. Seus dados serão carregados da planilha e cada alteração será sincronizada automaticamente.</p>
         {(erro || google.erro) && <p className="notice error" role="alert">{erro || google.erro}</p>}
         <div className="first-access-actions">
-          <button className="bt" type="submit" disabled={salvando || google.sincronizando} data-testid="primeiro-acesso.google">
+          <button className="bt" type="submit" disabled={salvando || google.sincronizando} data-testid="login.google">
             {salvando || google.sincronizando ? 'Conectando e carregando a planilha...' : 'Entrar com Google'}
           </button>
         </div>

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Db } from './db'
+import { localDateString } from '../domain/date'
 import { importarBackup, validarBackup } from './backup'
-import { excluirInsumo, registrarCompra, salvarInsumo, salvarProduto, salvarReceita } from './repos'
+import { atualizarPagamentoCompra, excluirInsumo, listarCompras, registrarCompra, salvarInsumo, salvarProduto, salvarReceita } from './repos'
 
 function fakeDb(queryRows: (sql: string) => unknown[] = () => []) {
   const calls: { sql: string; params: unknown[] }[] = []
@@ -18,11 +19,12 @@ describe('Phase 1 data operations', () => {
   it('saves prep metadata and both ingredient and subrecipe rows', async () => {
     const f = fakeDb()
     await salvarReceita(f.db, {
-      nome: 'Massa', rendimento: 2, perdaPct: 0.1, tempoMin: 25,
+      nome: 'MASSA AMANTEIGADA', rendimento: 2, perdaPct: 0.1, tempoMin: 25,
       modoPreparo: 'Misturar', passosPreparo: ['Pesar', 'Misturar'],
       itens: [{ insumoId: 'farinha', quantidadeBase: 500 }, { subreceitaId: 'creme', quantidadeBase: 100 }],
     })
     expect(f.transactionCalls).toBe(1)
+    expect(f.calls[0].params[1]).toBe('Massa amanteigada')
     expect(f.calls[0].sql).toContain('passos_preparo')
     expect(f.calls[0].params[5]).toBe(25)
     expect(f.calls[0].params[7]).toBe(JSON.stringify(['Pesar', 'Misturar']))
@@ -33,11 +35,12 @@ describe('Phase 1 data operations', () => {
   it('edits a recipe and replaces its ingredient rows transactionally', async () => {
     const f = fakeDb()
     await salvarReceita(f.db, {
-      id: 'recipe', nome: 'Massa atualizada', rendimento: 5, perdaPct: 0,
+      id: 'recipe', nome: 'MASSA ATUALIZADA', rendimento: 5, perdaPct: 0,
       itens: [{ insumoId: 'farinha', quantidadeBase: 250 }],
     })
     expect(f.transactionCalls).toBe(1)
     expect(f.calls.some((call) => call.sql.includes('UPDATE receita SET'))).toBe(true)
+    expect(f.calls.find((call) => call.sql.includes('UPDATE receita SET'))?.params[0]).toBe('Massa atualizada')
     expect(f.calls.some((call) => call.sql.includes('DELETE FROM receita_item'))).toBe(true)
     expect(f.calls.some((call) => call.sql.includes('INSERT INTO receita_item'))).toBe(true)
   })
@@ -48,6 +51,7 @@ describe('Phase 1 data operations', () => {
       : [])
     await registrarCompra(f.db, {
       insumoId: 'farinha', unidade: 'kg', quantidade: 5, totalCents: 22000,
+      fornecedorId: 'supplier', pago: true, formaPagamento: 'pix', data: localDateString(),
     })
     const update = f.calls.find((call) => call.sql.includes('UPDATE insumo SET custo_medio'))
     expect(update?.params[0]).toBeCloseTo(3.2, 6)
@@ -55,13 +59,43 @@ describe('Phase 1 data operations', () => {
     expect(f.calls.some((call) => call.sql.includes("VALUES (?,?,?,?,?,?,?,?,?,?)") && call.params[3] === 'compra')).toBe(true)
   })
 
-  it('does not create an inventory balance when registering an ingredient in Phase 1', async () => {
+  it('updates the average cost when a purchase is cheaper than the current cost', async () => {
+    const f = fakeDb((sql) => sql.includes('SELECT unidade_base, estoque_atual, custo_medio FROM insumo')
+      ? [{ unidade_base: 'g', estoque_atual: 5000, custo_medio: 2 }]
+      : [])
+    await registrarCompra(f.db, {
+      insumoId: 'farinha', unidade: 'kg', quantidade: 5, totalCents: 5000,
+      fornecedorId: 'supplier', pago: true, formaPagamento: 'pix', data: localDateString(),
+    })
+    const update = f.calls.find((call) => call.sql.includes('UPDATE insumo SET custo_medio'))
+    expect(update?.params[0]).toBeCloseTo(1.5, 6)
+  })
+
+  it('creates the initial inventory balance when registering an ingredient', async () => {
     const f = fakeDb()
     await salvarInsumo(f.db, {
       nome: 'Farinha', unidade: 'kg', quantidade: 2, totalCents: 5000,
     })
     const insert = f.calls.find((call) => call.sql.includes('INSERT INTO insumo'))
-    expect(insert?.params[7]).toBe(0)
+    expect(insert?.params[7]).toBe(2000)
+    expect(f.calls.some((call) => call.sql.includes('INSERT INTO movimento_estoque') && call.params[3] === 'cadastro')).toBe(true)
+  })
+
+  it('lists purchase history according to payment status', async () => {
+    const f = fakeDb()
+    await listarCompras(f.db, 'pendentes')
+    const query = f.db.query.mock.calls.find(([sql]) => String(sql).includes('FROM compra'))?.[0]
+    expect(query).toContain('c.pago=0')
+    expect(query).toContain('GROUP_CONCAT')
+  })
+
+  it('marks a pending purchase as paid and updates the related ledger entry', async () => {
+    const f = fakeDb((sql) => sql.includes('SELECT id FROM lancamento') ? [{ id: 'ledger-1' }] : [])
+    await atualizarPagamentoCompra(f.db, 'purchase-1', true)
+    const compraCall = f.calls.find((call) => call.sql.includes('UPDATE compra SET pago='))
+    const lancamentoCall = f.calls.find((call) => call.sql.includes('UPDATE lancamento SET pago='))
+    expect(compraCall?.params[0]).toBe(1)
+    expect(lancamentoCall?.params[0]).toBe(1)
   })
 
   it('prevents deleting an ingredient still used by a recipe', async () => {
@@ -87,14 +121,16 @@ describe('Phase 1 data operations', () => {
       ? [{ rendimento_unidade: 'ml' }]
       : [])
     await salvarProduto(f.db, {
-      nome: 'Xarope', receitaId: 'recipe',
+      nome: 'XAROPE', receitaId: 'recipe',
       variantes: [{
-        nome: '250 ml', unidades: 1, pesoG: null, volumeMl: 250,
+        nome: 'PACOTE 250 ML', unidades: 1, pesoG: null, volumeMl: 250,
         precoCents: 500, embalagemInsumoId: null, rotuloInsumoId: null,
       }],
     })
     const insert = f.calls.find((call) => call.sql.includes('INSERT INTO produto_variante'))
+    expect(f.calls.find((call) => call.sql.includes('INSERT INTO produto ('))?.params[1]).toBe('Xarope')
     expect(insert?.sql).toContain('volume_ml')
+    expect(insert?.params[2]).toBe('Pacote 250 ml')
     expect(insert?.params[4]).toBe(250)
   })
 

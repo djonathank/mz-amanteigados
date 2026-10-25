@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useDb } from '../data/DbContext'
-import { carregarBase, custoDaVariante, type Base } from '../data/calculos'
+import { carregarBase, custoDaVariante, custoPorUnidade, type Base } from '../data/calculos'
 import { atualizarPrecoVariante } from '../data/repos'
 import { formatBRL } from '../domain/money'
 import { profit, realMargin, suggestedPrice, unitCost } from '../domain/pricing'
-import { Campo, Selecao } from './ui'
+import { AlertaConclusao, Campo, MensagemModal, Selecao } from './ui'
 
 export default function Precificacao() {
   const db = useDb()
   const [search] = useSearchParams()
   const [base, setBase] = useState<Base | null>(null)
   const [varianteId, setVarianteId] = useState('')
-  const [custoReceita, setCustoReceita] = useState(Number(search.get('lote')) || 60.2)
-  const [pacotes, setPacotes] = useState(Number(search.get('pacotes')) || 8)
-  const [margem, setMargem] = useState(40)
-  const [formaPagamento, setFormaPagamento] = useState<'pix' | 'cartao' | 'dinheiro'>('pix')
+  const [custoReceita, setCustoReceita] = useState('')
+  const [pacotes, setPacotes] = useState('')
+  const [margem, setMargem] = useState('40')
+  const [formaPagamento, setFormaPagamento] = useState<'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro'>('pix')
   const [aumento, setAumento] = useState(10)
   const [aviso, setAviso] = useState('')
   const [erro, setErro] = useState('')
+  const [erroCalculadoFechado, setErroCalculadoFechado] = useState('')
 
   useEffect(() => {
     let ativo = true
@@ -26,24 +27,37 @@ export default function Precificacao() {
       if (!ativo) return
       setBase(dados)
       const receitaId = search.get('receita')
-      const padrao = dados.variantes.find((variant) => variant.receita_id === receitaId)?.id ?? dados.variantes[0]?.id ?? 'manual'
+      const receitaSelecionada = dados.receitas.find((item) => item.id === receitaId)
+      const padrao = receitaSelecionada
+        ? 'manual'
+        : dados.variantes.find((variant) => variant.receita_id === receitaId)?.id ?? dados.variantes[0]?.id ?? 'manual'
       setVarianteId(padrao)
+      if (receitaSelecionada) {
+        const rendimentoUtil = receitaSelecionada.rendimento_qtd * (1 - receitaSelecionada.perda_pct)
+        const custoTotal = custoPorUnidade(receitaSelecionada, dados) * rendimentoUtil / 100
+        setCustoReceita(Number.isFinite(custoTotal) ? custoTotal.toFixed(2) : '')
+        setPacotes(String(Math.round(rendimentoUtil)))
+      } else {
+        setCustoReceita('')
+        setPacotes('')
+      }
       const margemConfigurada = Number(dados.config.margem_padrao ?? 40)
-      setMargem(Number.isFinite(margemConfigurada) ? margemConfigurada : 40)
+      setMargem(Number.isFinite(margemConfigurada) ? String(margemConfigurada) : '40')
     }).catch((e) => {
       if (ativo) setErro(e instanceof Error ? e.message : String(e))
     })
     return () => { ativo = false }
   }, [db, search])
 
-  const taxa = formaPagamento === 'cartao'
-    ? Number(base?.config.taxa_cartao ?? 3.5)
-    : formaPagamento === 'pix'
-      ? Number(base?.config.taxa_pix ?? 0)
-      : 0
+  const taxa = formaPagamento === 'cartao_credito'
+    ? Number(base?.config.taxa_cartao_credito ?? base?.config.taxa_cartao ?? 3.5)
+    : formaPagamento === 'cartao_debito'
+      ? Number(base?.config.taxa_cartao_debito ?? base?.config.taxa_cartao ?? 3.5)
+      : formaPagamento === 'pix' ? Number(base?.config.taxa_pix ?? 0) : 0
   const opcoesPagamento: [string, string][] = [
     ['pix', `Pix (${Number(base?.config.taxa_pix ?? 0)}%)`],
-    ['cartao', `Cartão (${Number(base?.config.taxa_cartao ?? 3.5)}%)`],
+    ['cartao_credito', `Cartão de crédito (${Number(base?.config.taxa_cartao_credito ?? base?.config.taxa_cartao ?? 3.5)}%)`],
+    ['cartao_debito', `Cartão de débito (${Number(base?.config.taxa_cartao_debito ?? base?.config.taxa_cartao ?? 3.5)}%)`],
     ['dinheiro', 'Dinheiro (0%)'],
   ]
 
@@ -54,20 +68,25 @@ export default function Precificacao() {
   try {
     custoPacote = variante && base
       ? custoDaVariante(variante, base)
-      : base && Number.isFinite(custoReceita) && Number.isFinite(pacotes) && pacotes > 0
-        ? unitCost(Math.round(custoReceita * 100), pacotes)
+      : base && Number.isFinite(Number(custoReceita)) && Number.isFinite(Number(pacotes)) && Number(pacotes) > 0
+        ? unitCost(Math.round(Number(custoReceita) * 100), Number(pacotes))
         : 0
   } catch (e) {
     calculoErro = e instanceof Error ? e.message : String(e)
   }
-  const quantidadePacotes = variante ? 1 : pacotes
+  const quantidadePacotes = variante ? 1 : Number(pacotes)
+  const margemNumero = Number(margem)
+  const custoManualValido = Boolean(variante)
+    || (Number(custoReceita) >= 0 && Number(custoReceita) <= 999.99)
   const valido = Number.isFinite(custoPacote) && custoPacote > 0
-    && Number.isFinite(quantidadePacotes) && quantidadePacotes > 0
-    && Number.isFinite(margem) && margem >= 0 && Number.isFinite(taxa) && taxa >= 0 && margem + taxa < 100
+    && custoManualValido
+    && Number.isInteger(quantidadePacotes) && quantidadePacotes > 0 && quantidadePacotes <= 999
+    && Number.isFinite(margemNumero) && margemNumero >= 0 && margemNumero <= 100
+    && Number.isFinite(taxa) && taxa >= 0 && taxa <= 100 && margemNumero + taxa < 100
   let preco = 0
   if (valido) {
     try {
-      preco = suggestedPrice({ custoUnitario: custoPacote, margem: margem / 100, taxa: taxa / 100 })
+      preco = suggestedPrice({ custoUnitario: custoPacote, margem: margemNumero / 100, taxa: taxa / 100 })
     } catch (e) {
       calculoErro = e instanceof Error ? e.message : String(e)
     }
@@ -75,7 +94,8 @@ export default function Precificacao() {
 
   const simulacao = useMemo(() => {
     if (!base || !receita || !variante || !(Number.isFinite(aumento) && aumento >= 0)
-      || !(Number.isFinite(margem) && margem >= 0 && Number.isFinite(taxa) && taxa >= 0 && margem + taxa < 100)) {
+      || !(Number.isFinite(margemNumero) && margemNumero >= 0 && margemNumero <= 100
+        && Number.isFinite(taxa) && taxa >= 0 && taxa <= 100 && margemNumero + taxa < 100)) {
       return { itens: [], erro: '' }
     }
     try {
@@ -97,15 +117,21 @@ export default function Precificacao() {
           : item),
       }
       const novoCusto = custoDaVariante(variante, comAumento)
-      const resultado = suggestedPrice({ custoUnitario: novoCusto, margem: margem / 100, taxa: taxa / 100 })
+      const resultado = suggestedPrice({ custoUnitario: novoCusto, margem: margemNumero / 100, taxa: taxa / 100 })
       return { insumo, custoNovo: novoCusto, precoNovo: resultado, delta: novoCusto - custoPacote }
     })
     return { itens, erro: '' }
     } catch (e) {
       return { itens: [], erro: e instanceof Error ? e.message : String(e) }
     }
-  }, [aumento, base, custoPacote, margem, receita, taxa, variante])
+  }, [aumento, base, custoPacote, margemNumero, receita, taxa, variante])
   const simulacoes = simulacao.itens
+  const erroCalculado = calculoErro || simulacao.erro
+  const erroVisivel = erro || (erroCalculado === erroCalculadoFechado ? '' : erroCalculado)
+
+  useEffect(() => {
+    if (!erroCalculado) setErroCalculadoFechado('')
+  }, [erroCalculado])
 
   const campo = (rotulo: string, valor: number, set: (n: number) => void, id: string, mascara: 'dinheiro' | 'percentual' | 'inteiro' = 'percentual') => (
     <Campo
@@ -134,10 +160,10 @@ export default function Precificacao() {
   return (
     <>
       <h1>Precificação</h1>
-      <p className="sb">Calcule preço, lucro e margem de cada pacote</p>
-      {erro && <p className="notice error" role="alert">{erro}</p>}
-      {aviso && <p className="notice success" role="status">{aviso}</p>}
-      {calculoErro && <p className="notice error" role="alert">{calculoErro}</p>}
+      <p className="sb">Calcule preço, lucro e margem de cada produto</p>
+      <AlertaConclusao mensagem={aviso} onConcluir={() => setAviso('')} />
+      <MensagemModal tipo="erro" mensagem={erroVisivel}
+        onFechar={() => { setErro(''); setErroCalculadoFechado(erroCalculado) }} />
       {base && base.variantes.length > 0 && (
         <div className="cd">
           <h2>Produto para precificar</h2>
@@ -152,7 +178,7 @@ export default function Precificacao() {
         </div>
       )}
       <div className="hero">
-        <small>Preço sugerido {variante ? 'por pacote' : 'por pacote'}</small>
+        <small>Preço sugerido {variante ? 'por produto' : 'por produto'}</small>
         <b data-testid="preco.resultado">{valido && !calculoErro ? formatBRL(preco) : '--'}</b>
         {valido && !calculoErro && (
           <small>
@@ -166,25 +192,28 @@ export default function Precificacao() {
         <h2>Simular preço</h2>
         {!variante && (
           <>
-            {campo('Custo total da receita (R$)', custoReceita, setCustoReceita, 'custo-receita', 'dinheiro')}
-            {campo('Pacotes por receita', pacotes, setPacotes, 'pacotes', 'inteiro')}
+            <Campo rotulo="Custo total da receita (R$)" id="preco.custo-receita" valor={custoReceita}
+              mascara="dinheiro" maxDigitos={5} onChange={(value) => { setCustoReceita(value); setErro(''); setErroCalculadoFechado('') }} />
+            <Campo rotulo="Rendimento por receita" id="preco.pacotes" valor={pacotes}
+              mascara="inteiro" onChange={(value) => { setPacotes(value); setErro(''); setErroCalculadoFechado('') }} maxDigitos={3} />
           </>
         )}
         <div className="g">
-          {campo('Margem desejada (%)', margem, setMargem, 'margem')}
+          <Campo rotulo="Margem de lucro (%)" id="preco.margem" valor={margem} mascara="percentual"
+            onChange={(value) => { setMargem(value); setErro(''); setErroCalculadoFechado('') }} maxDigitos={5} />
           <Selecao
             rotulo="Forma de pagamento"
             id="preco.forma-pagamento"
             valor={formaPagamento}
             onChange={(value) => {
-              if (value === 'pix' || value === 'cartao' || value === 'dinheiro') setFormaPagamento(value)
+              if (value === 'pix' || value === 'cartao_credito' || value === 'cartao_debito' || value === 'dinheiro') setFormaPagamento(value)
             }}
             opcoes={opcoesPagamento}
           />
         </div>
-        <p className="helper">
-          A margem inicial vem de Custos e configurações. A taxa considera a tarifa do meio de pagamento selecionado; dinheiro não tem taxa.
-        </p>
+        {/* <p className="helper">
+          A margem inicial vem de Custos. A taxa considera a tarifa do meio de pagamento selecionado; dinheiro não tem taxa.
+        </p> */}
         {variante && <>
           {campo('Aumento simulado de cada insumo (%)', aumento, setAumento, 'aumento-insumo')}
           <p className="helper">Veja como o custo e o preço sugerido mudariam se cada insumo usado nesta receita subir esse percentual.</p>

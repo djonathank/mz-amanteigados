@@ -27,6 +27,49 @@ export function normalizarNumeroDigitado(value: string, mask: NumericMask): stri
   return `${sinal}${inteiro || '0'}.${fracao}`
 }
 
+export function filtrarEntradaNumerica(value: string, options: { negativo?: boolean; decimal?: boolean } = {}): string {
+  const { negativo = false, decimal = true } = options
+  let result = ''
+  let separadorUsado = false
+  for (const caractere of value) {
+    if (/\d/.test(caractere)) {
+      result += caractere
+    } else if (negativo && caractere === '-' && result === '' && !result.startsWith('-')) {
+      result = '-'
+    } else if (decimal && (caractere === ',' || caractere === '.') && !separadorUsado) {
+      result += '.'
+      separadorUsado = true
+    }
+  }
+  return result
+}
+
+export function filtrarNumeroSemMascara(value: string, decimal = true, maxDigitos = 10): string {
+  let result = ''
+  let digitos = 0
+  let separadorUsado = false
+  for (const caractere of value) {
+    if (/\d/.test(caractere) && digitos < maxDigitos) {
+      result += caractere
+      digitos++
+    } else if (decimal && digitos < maxDigitos && (caractere === ',' || caractere === '.') && !separadorUsado) {
+      result += '.'
+      separadorUsado = true
+    }
+  }
+  return result
+}
+
+export function limitarDigitos(value: string, maxDigitos: number): string {
+  let digitos = 0
+  return [...value].filter((caractere) => {
+    if (!/\d/.test(caractere)) return true
+    if (digitos >= maxDigitos) return false
+    digitos++
+    return true
+  }).join('')
+}
+
 /** Converte a sequência de teclas de um campo monetário em reais.
  * Assim, ao digitar 1, 2 e 3 o campo mostra R$ 0,01, R$ 0,12 e R$ 1,23.
  */
@@ -46,9 +89,7 @@ export function formatarNumeroMascarado(value: string, mask: NumericMask, focado
   const negativo = normalizado.startsWith('-')
   const unsigned = negativo ? normalizado.slice(1) : normalizado
   const [inteiroBruto = '0', fracaoBruta] = unsigned.split('.')
-  const inteiro = focado && mask === 'quantidade'
-    ? inteiroBruto || '0'
-    : (Number(inteiroBruto || '0')).toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+  const inteiro = (Number(inteiroBruto || '0')).toLocaleString('pt-BR', { maximumFractionDigits: 0 })
   let numero = `${negativo ? '-' : ''}${inteiro}`
 
   if (fracaoBruta !== undefined && fracaoBruta !== '') {

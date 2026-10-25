@@ -1,9 +1,41 @@
 import { canTransition, type OrderStatus } from '../domain/orders'
+import { capitalizarNome, formatarTelefone } from '../domain/text'
+import { localDateString } from '../domain/date'
 import type { Db } from './db'
 import { novoId, registrarVenda } from './repos'
 import { carregarBase, custoDaVariante } from './calculos'
 
 const agora = () => new Date().toISOString()
+const validarNomeContato = (nome: string, entidade: string) => {
+  const limpo = nome.trim()
+  if (limpo.length < 2 || limpo.length > 60 || !/^[\p{L}\s]+$/u.test(limpo)) {
+    throw new Error(`O nome do ${entidade} deve ter de 2 a 60 letras e espaços, sem caracteres especiais.`)
+  }
+  return capitalizarNome(limpo)
+}
+const validarTextoOpcional = (valor: string | null, campo: string) => {
+  const texto = valor ?? ''
+  if (texto.length > 200 || !/^[\p{L}\p{N}\s]*$/u.test(texto)) {
+    throw new Error(`${campo} deve ter até 200 letras, números e espaços, sem caracteres especiais.`)
+  }
+  return texto.trim()
+}
+const validarTelefone = (valor: string | null, campo: string) => {
+  const digitos = (valor ?? '').replace(/\D/g, '')
+  if (digitos.length < 10 || digitos.length > 11) {
+    throw new Error(`${campo} deve conter de 10 a 11 números.`)
+  }
+  return digitos ? formatarTelefone(digitos) : ''
+}
+const validarDataNascimento = (valor: string | null) => {
+  if (!valor) return ''
+  const data = new Date(`${valor}T00:00:00`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor) || Number.isNaN(data.getTime())
+    || localDateString(data) !== valor || valor >= localDateString()) {
+    throw new Error('A data de nascimento deve ser válida e anterior a hoje.')
+  }
+  return valor
+}
 
 export interface ClienteRow {
   id: string; nome: string; whatsapp: string | null; endereco: string | null
@@ -11,12 +43,12 @@ export interface ClienteRow {
 }
 
 export interface FornecedorRow {
-  id: string; nome: string; contato: string | null; observacoes: string | null
+  id: string; nome: string; contato: string | null; endereco: string | null; observacoes: string | null
 }
 
 export interface EncomendaRow {
   id: string; cliente_id: string | null; cliente_nome: string | null; data_entrega: string
-  status: OrderStatus; sinal_cents: number; total_cents: number; observacoes: string | null
+  status: OrderStatus; recebido_cents: number; total_cents: number; observacoes: string | null
   origem: 'agendada' | 'agora'
 }
 
@@ -35,7 +67,11 @@ export const listarClientes = (db: Db) =>
   db.query<ClienteRow>('SELECT id, nome, whatsapp, endereco, aniversario, observacoes FROM cliente WHERE deleted_at IS NULL ORDER BY nome')
 
 export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id?: string }) {
-  if (!input.nome.trim()) throw new Error('Informe o nome do cliente.')
+  const nome = validarNomeContato(input.nome, 'cliente')
+  const whatsapp = validarTelefone(input.whatsapp, 'O WhatsApp do cliente')
+  const endereco = validarTextoOpcional(input.endereco, 'O endereço')
+  const aniversario = validarDataNascimento(input.aniversario)
+  const observacoes = validarTextoOpcional(input.observacoes, 'As observações')
   const id = input.id ?? novoId()
   const t = agora()
   if (input.id) {
@@ -43,12 +79,12 @@ export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id
     if (!current) throw new Error('O cliente que você está editando não foi encontrado.')
     await db.run(
       'UPDATE cliente SET nome=?, whatsapp=?, endereco=?, aniversario=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
-      [input.nome.trim(), input.whatsapp || null, input.endereco || null, input.aniversario || null, input.observacoes || null, t, id],
+      [nome, whatsapp, endereco || null, aniversario || null, observacoes || null, t, id],
     )
   } else {
     await db.run(
       'INSERT INTO cliente (id, nome, whatsapp, endereco, aniversario, observacoes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
-      [id, input.nome.trim(), input.whatsapp || null, input.endereco || null, input.aniversario || null, input.observacoes || null, t, t],
+      [id, nome, whatsapp, endereco || null, aniversario || null, observacoes || null, t, t],
     )
   }
   return id
@@ -65,20 +101,23 @@ export async function excluirCliente(db: Db, id: string) {
 }
 
 export const listarFornecedores = (db: Db) =>
-  db.query<FornecedorRow>('SELECT id, nome, contato, observacoes FROM fornecedor WHERE deleted_at IS NULL ORDER BY nome')
+  db.query<FornecedorRow>('SELECT id, nome, contato, endereco, observacoes FROM fornecedor WHERE deleted_at IS NULL ORDER BY nome')
 
 export async function salvarFornecedor(db: Db, input: Omit<FornecedorRow, 'id'> & { id?: string }) {
-  if (!input.nome.trim()) throw new Error('Informe o nome do fornecedor.')
+  const nome = validarNomeContato(input.nome, 'fornecedor')
+  const contato = validarTelefone(input.contato, 'O WhatsApp do fornecedor')
+  const endereco = validarTextoOpcional(input.endereco, 'O endereço')
+  const observacoes = validarTextoOpcional(input.observacoes, 'As observações')
   const id = input.id ?? novoId()
   const t = agora()
   if (input.id) {
     const [current] = await db.query<{ id: string }>('SELECT id FROM fornecedor WHERE id=? AND deleted_at IS NULL', [id])
     if (!current) throw new Error('O fornecedor que você está editando não foi encontrado.')
-    await db.run('UPDATE fornecedor SET nome=?, contato=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
-      [input.nome.trim(), input.contato || null, input.observacoes || null, t, id])
+    await db.run('UPDATE fornecedor SET nome=?, contato=?, endereco=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
+      [nome, contato || null, endereco || null, observacoes || null, t, id])
   } else {
-    await db.run('INSERT INTO fornecedor (id, nome, contato, observacoes, created_at, updated_at) VALUES (?,?,?,?,?,?)',
-      [id, input.nome.trim(), input.contato || null, input.observacoes || null, t, t])
+    await db.run('INSERT INTO fornecedor (id, nome, contato, endereco, observacoes, created_at, updated_at) VALUES (?,?,?,?,?,?,?)',
+      [id, nome, contato || null, endereco || null, observacoes || null, t, t])
   }
   return id
 }
@@ -95,12 +134,15 @@ export const listarEncomendas = (db: Db) =>
             CASE WHEN e.status='cancelado' THEN 'cancelado'
                  WHEN e.status IN ('entregue','pago') THEN 'finalizado'
                  ELSE 'agendado' END AS status,
-            e.sinal_cents, e.total_cents, e.observacoes, 'agendada' AS origem
+            COALESCE((SELECT SUM(l.valor_cents) FROM lancamento l
+                      WHERE l.origem_tipo='encomenda' AND l.origem_id=e.id AND l.tipo='receita'
+                      AND l.pago=1 AND l.deleted_at IS NULL), 0) AS recebido_cents,
+            e.total_cents, e.observacoes, 'agendada' AS origem
      FROM encomenda e LEFT JOIN cliente c ON c.id=e.cliente_id
      WHERE e.deleted_at IS NULL
      UNION ALL
      SELECT v.id, v.cliente_id, c.nome AS cliente_nome, v.data AS data_entrega,
-            'finalizado' AS status, 0 AS sinal_cents, v.total_cents, NULL AS observacoes, 'agora' AS origem
+            'finalizado' AS status, v.total_cents AS recebido_cents, v.total_cents, NULL AS observacoes, 'agora' AS origem
      FROM venda v LEFT JOIN cliente c ON c.id=v.cliente_id
      WHERE v.deleted_at IS NULL AND v.encomenda_id IS NULL
      ORDER BY data_entrega`,
@@ -117,17 +159,15 @@ export const listarItensEncomenda = (db: Db, encomendaId: string) =>
   )
 
 export async function salvarEncomenda(db: Db, input: {
-  id?: string; clienteId?: string; dataEntrega: string; sinalCents: number; observacoes?: string
+  id?: string; clienteId?: string; dataEntrega: string; observacoes?: string
   itens: { varianteId: string; quantidade: number; precoUnitCents: number }[]
 }) {
   if (!input.dataEntrega || !input.itens.length
     || input.itens.some((item) => !Number.isInteger(item.quantidade) || !(item.quantidade > 0)
-      || !Number.isInteger(item.precoUnitCents) || item.precoUnitCents < 0)
-    || !Number.isInteger(input.sinalCents) || input.sinalCents < 0) {
-    throw new Error('Confira a data, o sinal e os itens da encomenda.')
+      || !Number.isInteger(item.precoUnitCents) || item.precoUnitCents < 0)) {
+    throw new Error('Confira a data e os itens da encomenda.')
   }
   const total = input.itens.reduce((sum, item) => sum + item.quantidade * item.precoUnitCents, 0)
-  if (input.sinalCents > total) throw new Error('O sinal não pode ser maior que o total da encomenda.')
   const id = input.id ?? novoId()
   const t = agora()
   await db.transaction(async () => {
@@ -136,15 +176,15 @@ export async function salvarEncomenda(db: Db, input: {
       if (!current) throw new Error('A encomenda não foi encontrada.')
       if (current.status !== 'pedido') throw new Error('Pedidos finalizados ou cancelados não podem ser editados.')
       await db.run(
-        'UPDATE encomenda SET cliente_id=?, data_entrega=?, sinal_cents=?, total_cents=?, observacoes=?, updated_at=? WHERE id=?',
-        [input.clienteId || null, input.dataEntrega, input.sinalCents, total, input.observacoes || null, t, id],
+        'UPDATE encomenda SET cliente_id=?, data_entrega=?, total_cents=?, observacoes=?, updated_at=? WHERE id=?',
+        [input.clienteId || null, input.dataEntrega, total, input.observacoes || null, t, id],
       )
       await db.run('UPDATE encomenda_item SET deleted_at=?, updated_at=? WHERE encomenda_id=? AND deleted_at IS NULL', [t, t, id])
     } else {
       await db.run(
-        `INSERT INTO encomenda (id, cliente_id, data_entrega, status, sinal_cents, total_cents, observacoes, created_at, updated_at)
-         VALUES (?,?,?,'pedido',?,?,?,?,?)`,
-        [id, input.clienteId || null, input.dataEntrega, input.sinalCents, total, input.observacoes || null, t, t],
+        `INSERT INTO encomenda (id, cliente_id, data_entrega, status, total_cents, observacoes, created_at, updated_at)
+         VALUES (?,?,?,'pedido',?,?,?,?)`,
+        [id, input.clienteId || null, input.dataEntrega, total, input.observacoes || null, t, t],
       )
     }
     for (const item of input.itens) {
@@ -153,15 +193,14 @@ export async function salvarEncomenda(db: Db, input: {
         [novoId(), id, item.varianteId, item.quantidade, item.precoUnitCents, t, t],
       )
     }
-    await db.run('UPDATE lancamento SET deleted_at=?, updated_at=? WHERE origem_tipo=? AND origem_id=? AND deleted_at IS NULL',
+    await db.run('UPDATE lancamento SET deleted_at=?, updated_at=? WHERE origem_tipo=? AND origem_id=? AND pago=0 AND deleted_at IS NULL',
       [t, t, 'encomenda', id])
-    if (input.sinalCents > 0) {
-      await criarLancamento(db, {
-        tipo: 'receita', categoria: 'Sinal de encomenda', valorCents: input.sinalCents,
-        data: t, vencimento: t, pago: true, origemTipo: 'encomenda', origemId: id,
-      })
-    }
-    const restante = total - input.sinalCents
+    const [recebido] = await db.query<{ total: number }>(
+      `SELECT COALESCE(SUM(valor_cents), 0) AS total FROM lancamento
+       WHERE origem_tipo='encomenda' AND origem_id=? AND tipo='receita' AND pago=1 AND deleted_at IS NULL`,
+      [id],
+    )
+    const restante = Math.max(0, total - Number(recebido?.total ?? 0))
     if (restante > 0) {
       await criarLancamento(db, {
         tipo: 'receita', categoria: 'Encomenda a receber', valorCents: restante,
@@ -206,10 +245,15 @@ export async function alterarStatusEncomenda(db: Db, id: string, status: OrderSt
 export async function entregarEncomenda(db: Db, input: {
   encomendaId: string; forma: string; motivoEstoqueNegativo?: string
 }) {
-  const [order] = await db.query<{ status: string; sinal_cents: number; total_cents: number; cliente_id: string | null }>(
-    'SELECT status, sinal_cents, total_cents, cliente_id FROM encomenda WHERE id=? AND deleted_at IS NULL', [input.encomendaId],
+  const [order] = await db.query<{ status: string; total_cents: number; cliente_id: string | null }>(
+    'SELECT status, total_cents, cliente_id FROM encomenda WHERE id=? AND deleted_at IS NULL', [input.encomendaId],
   )
   if (!order || order.status !== 'pedido') throw new Error('Este pedido não está mais agendado.')
+  const [received] = await db.query<{ total: number }>(
+    `SELECT COALESCE(SUM(valor_cents), 0) AS total FROM lancamento
+     WHERE origem_tipo='encomenda' AND origem_id=? AND tipo='receita' AND pago=1 AND deleted_at IS NULL`,
+    [input.encomendaId],
+  )
   const items = await db.query<{ variante_id: string; quantidade: number; preco_unit_cents: number }>(
     'SELECT variante_id, quantidade, preco_unit_cents FROM encomenda_item WHERE encomenda_id=? AND deleted_at IS NULL',
     [input.encomendaId],
@@ -219,7 +263,7 @@ export async function entregarEncomenda(db: Db, input: {
     forma: input.forma,
     clienteId: order.cliente_id,
     encomendaId: input.encomendaId,
-    descontoCents: order.sinal_cents,
+    descontoCents: Math.min(order.total_cents, Number(received?.total ?? 0)),
     motivoEstoqueNegativo: input.motivoEstoqueNegativo,
     itens: items.map((item) => {
       const variant = base.variantes.find((row) => row.id === item.variante_id)

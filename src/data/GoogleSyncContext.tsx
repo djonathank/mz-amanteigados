@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { Network } from '@capacitor/network'
 import { useDb } from './DbContext'
 import { withoutDatabaseChangeNotifications, subscribeDatabaseChanges } from './db'
-import { encontrarOuCriarPlanilha, obterPlanilha, sincronizarPlanilha } from './googleSheetsSync'
+import { encontrarOuCriarPlanilha, encontrarPlanilhaExistente, obterPlanilha, sincronizarPlanilha } from './googleSheetsSync'
 
 const SCOPES = ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/drive.file']
 let inicializacao: Promise<void> | null = null
@@ -51,6 +52,7 @@ interface Estado {
 interface GoogleSyncContextValue extends Estado {
   autenticacaoPronta: boolean
   conectar: () => Promise<{ email: string; nome: string }>
+  reconectar: () => Promise<{ email: string; nome: string }>
   desconectar: () => Promise<void>
   sincronizarAgora: () => Promise<void>
 }
@@ -79,6 +81,35 @@ function inicializarGoogle() {
   return inicializacao
 }
 
+async function autenticarGoogle(): Promise<Sessao> {
+  await inicializarGoogle()
+  if (Capacitor.isNativePlatform()) {
+    const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
+    const user = await GoogleAuth.signIn()
+    if (!user.email || !user.authentication.accessToken) {
+      throw new Error('O Google não retornou o e-mail e a autorização necessários para sincronizar.')
+    }
+    return {
+      email: user.email,
+      nome: user.name,
+      accessToken: user.authentication.accessToken,
+      accessTokenExpiresAt: Number.MAX_SAFE_INTEGER,
+    }
+  }
+  const token = await solicitarTokenWeb()
+  if (!token.access_token || !(token.expires_in > 0)) {
+    throw new Error('O Google não retornou um token de acesso válido.')
+  }
+  const profile = await obterPerfilGoogle(token.access_token)
+  if (!profile.email) throw new Error('O Google não retornou o e-mail da conta autenticada.')
+  return {
+    email: profile.email,
+    nome: profile.name ?? '',
+    accessToken: token.access_token,
+    accessTokenExpiresAt: Date.now() + token.expires_in * 1000,
+  }
+}
+
 export function GoogleSyncProvider({ children }: { children: ReactNode }) {
   const db = useDb()
   const [estado, setEstado] = useState(estadoVazio)
@@ -86,19 +117,28 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
   const sessao = useRef<Sessao | null>(null)
   const sincronizacaoAtual = useRef<Promise<void> | null>(null)
 
-  const sync = useCallback(async (atual: Sessao, salvarPlanilhaId = '') => {
-    if (sincronizacaoAtual.current) return sincronizacaoAtual.current
+  const sync = useCallback(async (
+    atual: Sessao,
+    options: { spreadsheetId?: string; origem?: 'mesclar' | 'planilha'; criarSeAusente?: boolean } = {},
+  ) => {
+    while (sincronizacaoAtual.current) {
+      await sincronizacaoAtual.current.catch(() => undefined)
+    }
     const operacao = (async () => {
       setEstado((value) => ({ ...value, sincronizando: true, erro: '' }))
       try {
-        const planilha = salvarPlanilhaId
-          ? await obterPlanilha(atual.accessToken, salvarPlanilhaId)
-          : await encontrarOuCriarPlanilha(atual.accessToken, db)
+        const planilha = options.spreadsheetId
+          ? await obterPlanilha(atual.accessToken, options.spreadsheetId)
+          : options.criarSeAusente === false
+            ? await encontrarPlanilhaExistente(atual.accessToken)
+            : await encontrarOuCriarPlanilha(atual.accessToken, db)
+        if (!planilha) throw new Error('Não foi encontrada a planilha MZ Gestão - Dados nesta conta Google.')
         const result = await sincronizarPlanilha(
           atual.accessToken,
           db,
           planilha,
           (operation) => withoutDatabaseChangeNotifications(operation),
+          options.origem ?? 'mesclar',
         )
         const sincronizadoEm = new Date().toISOString()
         setEstado({
@@ -139,7 +179,9 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let ativo = true
     if (Capacitor.isNativePlatform()) {
-      void inicializarGoogle().then(async () => {
+      void db.query<{ valor: string }>("SELECT valor FROM config WHERE chave='nome_usuario'").then(async ([perfil]) => {
+        if (!perfil?.valor?.trim() || !ativo) return
+        await inicializarGoogle()
         const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
         const authentication = await GoogleAuth.refresh()
         if (!authentication.accessToken || !ativo) return
@@ -161,14 +203,20 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       setAutenticacaoPronta(true)
     }
     return () => { ativo = false }
-  }, [renovarESincronizar])
+  }, [db, renovarESincronizar])
 
   useEffect(() => {
     let timer = 0
+    let ativo = true
+    let removerListener: (() => Promise<void>) | undefined
     const scheduleSync = () => {
       if (!sessao.current) return
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
+        if (sincronizacaoAtual.current) {
+          void sincronizacaoAtual.current.then(scheduleSync, scheduleSync)
+          return
+        }
         const atual = sessao.current
         if (atual) void renovarESincronizar(atual).catch((error) => setEstado((value) => ({
           ...value,
@@ -179,45 +227,42 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     const unsubscribe = subscribeDatabaseChanges(scheduleSync)
     const onOnline = () => scheduleSync()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') scheduleSync()
+    }
     window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisible)
+    if (Capacitor.isNativePlatform()) {
+      void Network.addListener('networkStatusChange', (status) => {
+        if (status.connected) scheduleSync()
+      }).then((listener) => {
+        if (ativo) removerListener = () => listener.remove()
+        else void listener.remove()
+      }).catch((error: unknown) => setEstado((value) => ({
+        ...value,
+        erro: `Não foi possível monitorar a conexão de rede: ${error instanceof Error ? error.message : String(error)}`,
+      })))
+      void Network.getStatus().then((status) => {
+        if (ativo && status.connected) scheduleSync()
+      }).catch((error: unknown) => setEstado((value) => ({
+        ...value,
+        erro: `Não foi possível verificar a conexão de rede: ${error instanceof Error ? error.message : String(error)}`,
+      })))
+    }
     return () => {
+      ativo = false
       window.clearTimeout(timer)
       unsubscribe()
       window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisible)
+      if (removerListener) void removerListener()
     }
   }, [renovarESincronizar])
 
   const conectar = useCallback(async () => {
     setEstado((value) => ({ ...value, erro: '' }))
     try {
-      await inicializarGoogle()
-      let atual: Sessao
-      if (Capacitor.isNativePlatform()) {
-        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
-        const user = await GoogleAuth.signIn()
-        if (!user.email || !user.authentication.accessToken) {
-          throw new Error('O Google não retornou o e-mail e a autorização necessários para sincronizar.')
-        }
-        atual = {
-          email: user.email,
-          nome: user.name,
-          accessToken: user.authentication.accessToken,
-          accessTokenExpiresAt: Number.MAX_SAFE_INTEGER,
-        }
-      } else {
-        const token = await solicitarTokenWeb()
-        if (!token.access_token || !(token.expires_in > 0)) {
-          throw new Error('O Google não retornou um token de acesso válido.')
-        }
-        const profile = await obterPerfilGoogle(token.access_token)
-        if (!profile.email) throw new Error('O Google não retornou o e-mail da conta autenticada.')
-        atual = {
-          email: profile.email,
-          nome: profile.name ?? '',
-          accessToken: token.access_token,
-          accessTokenExpiresAt: Date.now() + token.expires_in * 1000,
-        }
-      }
+      const atual = await autenticarGoogle()
       sessao.current = atual
       setEstado((value) => ({
         ...value,
@@ -235,7 +280,28 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       }))
       throw error
     }
-  }, [db, sync])
+  }, [sync])
+
+  const reconectar = useCallback(async () => {
+    setEstado((value) => ({ ...value, sincronizando: true, erro: '' }))
+    try {
+      const atual = await autenticarGoogle()
+      if (estado.email && estado.email.toLocaleLowerCase() !== atual.email.toLocaleLowerCase()) {
+        throw new Error('A conta Google selecionada é diferente da conectada. Desconecte a conta atual antes de trocar.')
+      }
+      sessao.current = atual
+      setEstado((value) => ({ ...value, email: atual.email, nome: atual.nome }))
+      await sync(atual, { origem: 'planilha', criarSeAusente: false })
+      return { email: atual.email, nome: atual.nome }
+    } catch (error) {
+      setEstado((value) => ({
+        ...value,
+        sincronizando: false,
+        erro: error instanceof Error ? error.message : String(error),
+      }))
+      throw error
+    }
+  }, [estado.email, sync])
 
   const desconectar = useCallback(async () => {
     if (Capacitor.isNativePlatform()) {
@@ -248,7 +314,8 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     sessao.current = null
     setEstado(estadoVazio)
-  }, [estado.email])
+    await db.clearData()
+  }, [db])
 
   const sincronizarAgora = useCallback(async () => {
     const atual = sessao.current
@@ -257,7 +324,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
   }, [renovarESincronizar])
 
   return (
-    <Contexto.Provider value={    { ...estado, autenticacaoPronta, conectar, desconectar, sincronizarAgora }}>
+    <Contexto.Provider value={{ ...estado, autenticacaoPronta, conectar, reconectar, desconectar, sincronizarAgora }}>
       {children}
     </Contexto.Provider>
   )

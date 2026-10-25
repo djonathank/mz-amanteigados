@@ -8,8 +8,10 @@ import {
 import { custoPorUnidade, type Base } from '../data/calculos'
 import { recipeBatchCost } from '../domain/cost'
 import { formatBRL } from '../domain/money'
+import { toBase, type Unit } from '../domain/units'
+import { capitalizarNome } from '../domain/text'
 import type { Receita } from '../domain/types'
-import { AlertaConclusao, Campo, FecharModal, focarCampo, Icon, Selecao } from './ui'
+import { AlertaConclusao, Campo, ConfirmacaoAcao, FecharModal, focarCampo, Icon, MensagemModal, Selecao, useModalAcessivel } from './ui'
 
 interface Linha {
   tipo: 'insumo' | 'subreceita'
@@ -17,7 +19,9 @@ interface Linha {
   quantidadeBase: number
 }
 
-const UNIDADES: [string, string][] = [['un', 'unidades'], ['g', 'gramas'], ['ml', 'mililitros']]
+const UNIDADES: [string, string][] = [['un', 'unidades'], ['g', 'gramas'], ['kg', 'quilogramas'], ['ml', 'mililitros'], ['l', 'litros']]
+const normalizarNomeReceita = (value: string) => value.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 60)
+const unidadeBase = (unidade: Unit) => unidade === 'kg' ? 'g' : unidade === 'l' ? 'ml' : unidade
 
 const formatarCustoUnitario = (custoCents: number, unidade: string) => custoCents > 0 && custoCents < 1
   ? `${custoCents.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 4 })} centavos por ${unidade}`
@@ -75,6 +79,7 @@ export default function Receitas() {
   const [carregando, setCarregando] = useState(true)
   const [formAberto, setFormAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [receitaPendente, setReceitaPendente] = useState<ReceitaRow | null>(null)
 
   const carregar = useCallback(async () => {
     const [listaInsumos, listaReceitas, listaItens, configuracao] = await Promise.all([
@@ -95,8 +100,8 @@ export default function Receitas() {
   const receitaTemporaria: ReceitaRow = {
     id: editando ?? 'rascunho',
     nome: nome || 'Rascunho',
-    rendimento_qtd: Number(rend),
-    rendimento_unidade: unidade,
+    rendimento_qtd: unidade ? toBase(Number(rend), unidade as Unit) : 0,
+    rendimento_unidade: unidade ? unidadeBase(unidade as Unit) : '',
     perda_pct: Number(perda) / 100,
     tempo_min: Number(tempo) || 0,
     modo_preparo: modo,
@@ -129,12 +134,14 @@ export default function Receitas() {
     }
   }
   const rendimentoUtil = Number(rend) > 0 && Number(perda) >= 0 && Number(perda) < 100
-    ? Number(rend) * (1 - Number(perda) / 100)
+    ? toBase(Number(rend), unidade as Unit) * (1 - Number(perda) / 100)
     : 0
   const custoPorSaida = rendimentoUtil > 0 ? custoLote / rendimentoUtil : 0
-  const labelUnidade = unidade === 'un' ? 'unidades' : unidade === 'g' ? 'g' : 'ml'
-  const quantidadeItemLabel = insumos.find((i) => i.id === sel)?.unidade_base ?? 'unidade base'
-  const valido = !!nome.trim() && rend.trim() !== '' && Number(rend) > 0 && !!unidade
+  const labelUnidade = unidadeBase(unidade as Unit)
+  const quantidadeItemLabel = insumos.find((i) => i.id === sel)?.unidade_base ?? ''
+  const valido = nome.trim().length >= 2 && nome.trim().length <= 60
+    && normalizarNomeReceita(nome.trim()) === nome.trim()
+    && rend.trim() !== '' && Number.isFinite(Number(rend)) && Number(rend) > 0 && !!unidade
     && perda.trim() !== '' && Number(perda) >= 0 && Number(perda) < 100
     && linhas.length > 0 && !erroCalculo
 
@@ -163,8 +170,17 @@ export default function Receitas() {
       const filhos = itens.filter((item) => item.receita_id === id)
       setEditando(id)
       setNome(selecionada.nome)
-      setRend(String(selecionada.rendimento_qtd))
-      setUnidade(selecionada.rendimento_unidade || 'un')
+      const rendimentoUnidade = selecionada.rendimento_unidade as Unit
+      const exibirEmUnidadeMaior = rendimentoUnidade === 'g' && selecionada.rendimento_qtd >= 1000
+        && selecionada.rendimento_qtd % 1000 === 0 ? 'kg'
+        : rendimentoUnidade === 'ml' && selecionada.rendimento_qtd >= 1000
+          && selecionada.rendimento_qtd % 1000 === 0 ? 'l'
+          : rendimentoUnidade
+      const unidadeEdicao = UNIDADES.some(([value]) => value === exibirEmUnidadeMaior) ? exibirEmUnidadeMaior : 'un'
+      setRend(String(unidadeEdicao === 'kg' || unidadeEdicao === 'l'
+        ? selecionada.rendimento_qtd / 1000
+        : selecionada.rendimento_qtd))
+      setUnidade(unidadeEdicao)
       setPerda(String(selecionada.perda_pct * 100))
       setTempo(selecionada.tempo_min == null ? '' : String(selecionada.tempo_min))
       const parsedSteps: unknown = selecionada.passos_preparo ? JSON.parse(selecionada.passos_preparo) : []
@@ -208,8 +224,8 @@ export default function Receitas() {
       await salvarReceita(db, {
         id: editando ?? undefined,
         nome,
-        rendimento: Number(rend),
-        rendimentoUnidade: unidade,
+        rendimento: toBase(Number(rend), unidade as Unit),
+        rendimentoUnidade: unidadeBase(unidade as Unit),
         perdaPct: Number(perda) / 100,
         tempoMin: tempo ? Number(tempo) : null,
         modoPreparo: modo,
@@ -222,8 +238,11 @@ export default function Receitas() {
     } finally {
       setSalvando(false)
     }
+    const nomeSalvo = capitalizarNome(nome)
     limpar()
-    setAviso(atualizando ? 'Receita atualizada.' : 'Receita salva.')
+    setAviso(atualizando
+      ? `Receita ${nomeSalvo} atualizada com sucesso!`
+      : `Receita ${nomeSalvo} cadastrada com sucesso!`)
     try {
       await carregar()
     } catch (e) {
@@ -231,23 +250,33 @@ export default function Receitas() {
     }
   }
 
-  const apagar = async (id: string) => {
-    if (!confirm('Excluir esta receita?')) return
+  const apagar = async () => {
+    if (!receitaPendente) return
+    const selecionada = receitaPendente
+    setReceitaPendente(null)
+    setErro('')
     try {
-      await excluirReceita(db, id)
-      await carregar()
-      if (editando === id) limpar()
-      setAviso('Receita excluída.')
+      await excluirReceita(db, selecionada.id)
+      if (editando === selecionada.id) limpar()
+      setAviso(`Receita ${selecionada.nome} excluída com sucesso!`)
+      try {
+        await carregar()
+      } catch (e) {
+        setErro(`Receita excluída, mas não foi possível atualizar a lista: ${e instanceof Error ? e.message : String(e)}`)
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
     }
   }
 
+  useModalAcessivel(Boolean(receitaPendente), () => setReceitaPendente(null), '#receita-confirmar-exclusao')
+
   return (
     <>
       <AlertaConclusao mensagem={aviso} onConcluir={() => setAviso('')} />
+      <MensagemModal tipo="erro" mensagem={aviso ? '' : erro} onFechar={() => setErro('')} />
       <h1>Receitas</h1>
-      <p className="sb">Fichas técnicas, modo de preparo e custos das receitas</p>
+      <p className="sb">Fichas técnicas e custos das receitas</p>
       <div className="cd">
         <div className="section-heading"><h2>Suas fichas técnicas</h2></div>
         {carregando && <p className="notice" role="status">Carregando receitas...</p>}
@@ -270,9 +299,9 @@ export default function Receitas() {
               <span className="ic" aria-hidden="true"><Icon name="recipe" /></span>
               <div>{recipe.nome}<small>{avisoCusto || `${formatBRL(custo * recipe.rendimento_qtd * (1 - recipe.perda_pct))} por receita · ${formatarCustoUnitario(custo, recipe.rendimento_unidade)}`}</small></div>
               <div className="row-actions">
-                <Link className="lk" to={`/precificacao?receita=${recipe.id}&pacotes=${saida}`}>Precificar</Link>
+                <Link className="lk" to={`/precificacao?receita=${recipe.id}&lote=${(custo * recipe.rendimento_qtd * (1 - recipe.perda_pct) / 100).toFixed(2)}&pacotes=${recipe.rendimento_qtd * (1 - recipe.perda_pct)}`}>Precificar</Link>
                 <button className="lk icon-action" aria-label={`Editar ${recipe.nome}`} onClick={() => editar(recipe.id)}><Icon name="edit" /></button>
-                <button className="lk icon-action" aria-label={`Excluir ${recipe.nome}`} onClick={() => apagar(recipe.id)}><Icon name="trash" /></button>
+                <button className="lk icon-action" aria-label={`Excluir ${recipe.nome}`} onClick={() => setReceitaPendente(recipe)}><Icon name="trash" /></button>
               </div>
             </div>
           )
@@ -281,22 +310,20 @@ export default function Receitas() {
       {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) limpar() }}><section className="add-dialog form-dialog" id="receita-form" role="dialog" aria-modal="true" aria-labelledby="receita-form-title">
         <FecharModal onClick={limpar} />
         <h2 id="receita-form-title">{editando ? 'Editar receita' : 'Nova receita'}</h2>
-        {erro && <p className="notice error" role="alert">{erro}</p>}
-        <Campo rotulo="Nome da receita" id="receita.nome" valor={nome} onChange={setNome} placeholder="Ex.: massa amanteigada" />
-        <div className="g">
-          <Campo rotulo={unidade ? `Rendimento (${labelUnidade})` : 'Rendimento'} id="receita.rendimento" valor={rend} onChange={setRend} mascara={unidade === 'un' ? 'inteiro' : 'quantidade'} />
+        <Campo rotulo="Nome da receita" id="receita.nome" valor={nome} onChange={(value) => setNome(normalizarNomeReceita(value))}
+          limite={60} minLength={2} required placeholder="Ex.: massa amanteigada" />
+        <div className="g recipe-yield-fields">
+          <Campo rotulo="Rendimento" id="receita.rendimento" valor={rend} onChange={setRend}
+            mascara={unidade === 'un' ? 'inteiro' : 'quantidade'} limite={60} />
           <Selecao rotulo="Unidade do rendimento" id="receita.unidade" valor={unidade} onChange={setUnidade} opcoes={UNIDADES} />
         </div>
         <div className="g">
-          <Campo rotulo="Perda ou quebra (%)" id="receita.perda" valor={perda} onChange={setPerda} mascara="percentual" />
-          <Campo rotulo="Tempo de preparo (min)" id="receita.tempo" valor={tempo} onChange={setTempo} mascara="inteiro" />
+          <Campo rotulo="Perda ou quebra (%)" id="receita.perda" valor={perda} onChange={setPerda} mascara="percentual" maxDigitos={10} />
+          <Campo rotulo="Tempo de preparo (min)" id="receita.tempo" valor={tempo} onChange={setTempo} mascara="inteiro" maxDigitos={10} />
         </div>
-        <label className="fl"><small>Modo de preparo</small>
-          <textarea rows={5} value={modo} data-testid="receita.modo" aria-label="Modo de preparo" onChange={(event) => setModo(event.target.value)} placeholder="Ex.:&#10;Misture os ingredientes&#10;Modele e asse até dourar" />
-        </label>
         <div className="cd subcard">
           <h3>Ingredientes</h3>
-          {linhas.length === 0 && <p className="sb">Adicione os ingredientes necessários para calcular o custo.</p>}
+          {/* {linhas.length === 0 && <p className="sb">Adicione os ingredientes necessários para calcular o custo.</p>} */}
           {linhas.map((linha, index) => (
             <div className="r" key={`${linha.tipo}-${linha.id}-${index}`}>
               <div>{nomeDe(linha)}<small>{linha.quantidadeBase} {linha.tipo === 'insumo' ? insumos.find((i) => i.id === linha.id)?.unidade_base : receitas.find((r) => r.id === linha.id)?.rendimento_unidade}</small></div>
@@ -304,25 +331,39 @@ export default function Receitas() {
             </div>
           ))}
           <div className="g">
-            <Selecao rotulo="Ingrediente" id="receita.componente" valor={sel} onChange={setSel} opcoes={opcoesInsumo} />
+            <div className="ingredient-selector">
+              <Selecao rotulo="Ingrediente" id="receita.componente" valor={sel} onChange={(value) => { setSel(value); setQtd('') }} opcoes={opcoesInsumo} />
+            </div>
           </div>
           <div className="g ingredient-controls">
-            <Campo rotulo={`Quantidade (${quantidadeItemLabel})`} id="receita.quantidade" valor={qtd} onChange={setQtd} mascara="quantidade" />
+            <Campo rotulo={quantidadeItemLabel ? `Quantidade (${quantidadeItemLabel})` : 'Quantidade'} id="receita.quantidade"
+              valor={qtd} onChange={setQtd} mascara="quantidade" maxDigitos={10} disabled={!sel} />
             <button className="bt o add-line" type="button" onClick={adicionar} disabled={!sel || !(Number(qtd) > 0)} data-testid="receita.adicionar-ingrediente"><Icon name="add" /> Adicionar ingrediente</button>
           </div>
         </div>
         {linhas.length > 0 && rendimentoUtil > 0 && !!unidade && perda.trim() !== '' && !erroCalculo && (
           <div className="cost-summary">
             <div><small>Custo total da receita</small><b>{formatBRL(custoLote)}</b></div>
-            <div><small>Custo por {unidade}</small><b>{formatBRL(custoPorSaida)}</b></div>
+            <div><small>Custo por {labelUnidade}</small><b>{formatBRL(custoPorSaida)}</b></div>
           </div>
         )}
         {erroCalculo && <p className="notice error">{erroCalculo}</p>}
-        <button className="bt" disabled={!valido || salvando} data-testid="receita.salvar" onClick={salvar}>
-          {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar receita'}
-        </button>
-        {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
+        <div className="form-actions">
+          <button className="bt o" type="button" disabled={salvando} onClick={limpar}>Cancelar</button>
+          <button className="bt" type="button" disabled={!valido || salvando} data-testid="receita.salvar" onClick={salvar}>
+            {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
+          </button>
+        </div>
       </section></div>}
+      {receitaPendente && <ConfirmacaoAcao
+        id="receita-confirmar-exclusao"
+        titulo="Excluir receita?"
+        mensagem={`Tem certeza que deseja excluir a receita ${receitaPendente.nome}?`}
+        confirmar="Excluir"
+        perigosa
+        onCancelar={() => setReceitaPendente(null)}
+        onConfirmar={() => void apagar()}
+      />}
     </>
   )
 }

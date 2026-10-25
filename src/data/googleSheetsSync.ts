@@ -2,15 +2,15 @@ import type { Db } from './db'
 
 export const SYNC_TABLES = [
   'insumo', 'fornecedor', 'cliente', 'receita', 'receita_item', 'produto', 'produto_variante',
-  'compra', 'compra_item', 'historico_preco_insumo', 'movimento_estoque',
-  'venda', 'venda_item', 'encomenda', 'encomenda_item', 'lancamento', 'config',
+  'compra', 'compra_item', 'historico_edicao_compra', 'historico_preco_insumo', 'movimento_estoque',
+  'venda', 'venda_item', 'encomenda', 'encomenda_item', 'lancamento', 'categoria_financeira', 'config',
 ] as const
 
 const META_SHEET = '_meta'
 const SPREADSHEET_NAME = 'MZ Gestão - Dados'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const SHEETS_API = 'https://sheets.googleapis.com/v4'
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 13
 
 export type SyncTable = typeof SYNC_TABLES[number]
 export type SyncRow = Record<string, unknown>
@@ -26,6 +26,21 @@ export interface SyncProgress {
 }
 
 export async function encontrarOuCriarPlanilha(token: string, db: Db): Promise<Spreadsheet> {
+  const existing = await encontrarPlanilhaExistente(token)
+  if (existing) return existing
+  const sheets: { properties: { title: string; gridProperties: { frozenRowCount: number } } }[] = SYNC_TABLES.map((title) => ({
+    properties: { title, gridProperties: { frozenRowCount: 1 } },
+  }))
+  sheets.push({ properties: { title: META_SHEET, gridProperties: { frozenRowCount: 1 } } })
+  const created = await googleRequest<Spreadsheet>(`${SHEETS_API}/spreadsheets`, token, {
+    method: 'POST',
+    body: JSON.stringify({ properties: { title: SPREADSHEET_NAME }, sheets }),
+  })
+  await inicializarPlanilha(token, db, created)
+  return created
+}
+
+export async function encontrarPlanilhaExistente(token: string): Promise<Spreadsheet | null> {
   const query = new URLSearchParams({
     q: `name='${SPREADSHEET_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
     fields: 'files(id,name,webViewLink)',
@@ -37,18 +52,7 @@ export async function encontrarOuCriarPlanilha(token: string, db: Db): Promise<S
   if ((result.files?.length ?? 0) > 1) {
     throw new Error('Há mais de uma planilha MZ Gestão - Dados no Drive. Renomeie ou remova as duplicadas antes de sincronizar.')
   }
-  if (result.files?.[0]) return obterPlanilha(token, result.files[0].id)
-
-  const sheets: { properties: { title: string; gridProperties: { frozenRowCount: number } } }[] = SYNC_TABLES.map((title) => ({
-    properties: { title, gridProperties: { frozenRowCount: 1 } },
-  }))
-  sheets.push({ properties: { title: META_SHEET, gridProperties: { frozenRowCount: 1 } } })
-  const created = await googleRequest<Spreadsheet>(`${SHEETS_API}/spreadsheets`, token, {
-    method: 'POST',
-    body: JSON.stringify({ properties: { title: SPREADSHEET_NAME }, sheets }),
-  })
-  await inicializarPlanilha(token, db, created)
-  return created
+  return result.files?.[0] ? obterPlanilha(token, result.files[0].id) : null
 }
 
 export async function obterPlanilha(token: string, spreadsheetId: string): Promise<Spreadsheet> {
@@ -63,6 +67,7 @@ export async function sincronizarPlanilha(
   db: Db,
   spreadsheet: Spreadsheet,
   aplicarDados: (operation: () => Promise<void>) => Promise<void>,
+  origem: 'mesclar' | 'planilha' = 'mesclar',
 ): Promise<SyncProgress> {
   const current = await obterPlanilha(token, spreadsheet.spreadsheetId)
   await garantirAbas(token, db, current)
@@ -92,15 +97,23 @@ export async function sincronizarPlanilha(
       throw new Error(`As colunas da aba "${table}" não correspondem ao esquema do aplicativo.`)
     }
     const remote = values.slice(1).filter((row) => row.some((value) => value !== '' && value != null))
-      .map((row) => parseSheetRow(row, columns, headers))
-    const local = await db.query<SyncRow>(`SELECT * FROM ${table}`)
-    merged[table] = mesclarLinhas(table, local, remote)
+      .map((row) => {
+        const parsed = parseSheetRow(row, columns, headers)
+        if (table === 'lancamento' && parsed.categoria === 'Sinal de encomenda') {
+          return { ...parsed, categoria: 'Pagamento de encomenda' }
+        }
+        return parsed
+      })
+    const local = origem === 'mesclar' ? await db.query<SyncRow>(`SELECT * FROM ${table}`) : []
+    merged[table] = selecionarLinhasSincronizadas(table, local, remote, origem)
     recordCount += merged[table].length
   }
 
   reconstruirSaldosSincronizados(merged)
   await aplicarDados(() => substituirTabelas(db, schema, merged))
-  await escreverPlanilha(token, current.spreadsheetId, schema, merged, new Date().toISOString())
+  if (origem === 'mesclar') {
+    await escreverPlanilha(token, current.spreadsheetId, schema, merged, new Date().toISOString())
+  }
   return {
     spreadsheetId: current.spreadsheetId,
     spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${current.spreadsheetId}/edit`,
@@ -194,9 +207,29 @@ export function mesclarLinhas(table: SyncTable, local: SyncRow[], remote: SyncRo
   return [...merged.values()]
 }
 
+export function selecionarLinhasSincronizadas(
+  table: SyncTable, local: SyncRow[], remote: SyncRow[], origem: 'mesclar' | 'planilha',
+): SyncRow[] {
+  return origem === 'planilha' ? remote : mesclarLinhas(table, local, remote)
+}
+
 export function reconstruirSaldosSincronizados(data: {
   insumo: SyncRow[]; produto_variante: SyncRow[]; movimento_estoque: SyncRow[]
 }) {
+  let sequencia = data.movimento_estoque.reduce(
+    (maior, movement) => Math.max(maior, Number(movement.sequencia ?? 0)),
+    0,
+  )
+  const movimentosSemSequencia = data.movimento_estoque
+    .filter((movement) => movement.sequencia == null)
+    .sort((left, right) => {
+      const porData = String(left.created_at ?? '').localeCompare(String(right.created_at ?? ''))
+      if (porData) return porData
+      const porDispositivo = String(left.device_id ?? '').localeCompare(String(right.device_id ?? ''))
+      return porDispositivo || String(left.id ?? '').localeCompare(String(right.id ?? ''))
+    })
+  for (const movement of movimentosSemSequencia) movement.sequencia = ++sequencia
+
   const balances = new Map<string, number>()
   for (const movement of data.movimento_estoque) {
     if (movement.deleted_at != null) continue
@@ -248,8 +281,11 @@ async function escreverPlanilha(
     ...SYNC_TABLES.map((table) => ({
       range: `'${table}'!A1`,
       values: [
-        schema[table].map((column) => column.name),
-        ...data[table].map((row) => schema[table].map((column) => row[column.name] ?? '')),
+        [...schema[table].map((column) => column.name), ...(table === 'encomenda' ? [''] : [])],
+        ...data[table].map((row) => [
+          ...schema[table].map((column) => row[column.name] ?? ''),
+          ...(table === 'encomenda' ? [''] : []),
+        ]),
       ],
     })),
   ]
@@ -260,7 +296,12 @@ async function escreverPlanilha(
 }
 
 export function colunasCompativeis(left: string[], right: string[]): boolean {
-  return left.length <= right.length && left.every((column, index) => column === right[index])
+  const normalized = left.filter((column) => column !== 'sinal_cents')
+  const currentColumns = normalized.slice(0, right.length)
+  const trailingLegacyColumns = normalized.slice(right.length)
+  return currentColumns.length <= right.length
+    && currentColumns.every((column, index) => column === right[index])
+    && trailingLegacyColumns.every((column) => column === right[right.length - 1])
 }
 
 async function googleRequest<T = void>(url: string, token: string, options: RequestInit = {}): Promise<T> {

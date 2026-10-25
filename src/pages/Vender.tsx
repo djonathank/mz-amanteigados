@@ -5,7 +5,7 @@ import { carregarBase, custoDaVariante, type Base } from '../data/calculos'
 import { registrarVenda } from '../data/repos'
 import { listarClientes, salvarEncomenda, type ClienteRow } from '../data/phase3'
 import { formatBRL } from '../domain/money'
-import { Campo, FecharModal, Selecao } from './ui'
+import { Campo, FecharModal, Selecao, SeletorData } from './ui'
 
 const FORMAS: [string, string][] = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']]
 const padraoData = () => {
@@ -62,7 +62,6 @@ export default function Vender() {
         await salvarEncomenda(db, {
           clienteId: clienteId || undefined,
           dataEntrega,
-          sinalCents: 0,
           observacoes,
           itens: itens.map((v) => ({ varianteId: v.id, quantidade: carrinho[v.id], precoUnitCents: v.preco_cents })),
         })
@@ -133,10 +132,11 @@ export default function Vender() {
             </div>)}
           </div>
           {modo === 'agendada' ? <>
-            <Campo rotulo="Data da entrega" id="encomenda.data" tipo="date" valor={dataEntrega} min={dataMinimaEncomenda} onChange={setDataEntrega} />
+            <SeletorData rotulo="Data da entrega" id="encomenda.data" valor={dataEntrega}
+              min={dataMinimaEncomenda} required onChange={setDataEntrega} />
             <Campo rotulo="Observações" id="encomenda.observacoes" valor={observacoes} onChange={setObservacoes} />
           </> : <>
-            <Campo rotulo="Data da venda" id="venda.data" tipo="date" valor={hoje} onChange={() => undefined} readOnly />
+            <SeletorData rotulo="Data da venda" id="venda.data" valor={hoje} disabled onChange={() => undefined} />
             <Campo rotulo="Desconto (R$)" id="venda.desconto" valor={desconto} onChange={setDesconto} mascara="dinheiro" />
           </>}
           {descontoCents > subtotal && <p className="notice error" role="alert">O desconto não pode ser maior que o subtotal.</p>}

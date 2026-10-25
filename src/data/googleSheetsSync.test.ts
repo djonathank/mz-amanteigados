@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Db } from './db'
 import {
-  colunasCompativeis, mesclarLinhas, parseSheetRow, reconstruirSaldosSincronizados,
+  colunasCompativeis, mesclarLinhas, parseSheetRow, reconstruirSaldosSincronizados, selecionarLinhasSincronizadas,
   substituirTabelas, SYNC_TABLES, type SyncRow, type SyncTable,
 } from './googleSheetsSync'
 
@@ -25,6 +25,14 @@ describe('Google Sheets sync merge', () => {
     expect(rows.find((row) => row.id === 'same')?.nome).toBe('Nuvem recente')
     expect(rows.some((row) => row.id === 'local-only')).toBe(true)
     expect(rows.some((row) => row.id === 'remote-only')).toBe(true)
+  })
+
+  it('replaces local cache with sheet rows when explicitly reloading the sheet', () => {
+    const local = [{ id: 'local-only', updated_at: '2026-10-07T10:00:00.000Z' }]
+    const remote = [{ id: 'sheet-row', updated_at: '2026-10-06T10:00:00.000Z' }]
+
+    expect(selecionarLinhasSincronizadas('insumo', local, remote, 'planilha')).toEqual(remote)
+    expect(selecionarLinhasSincronizadas('insumo', local, remote, 'mesclar')).toHaveLength(2)
   })
 
   it('uses device_id to break timestamp ties consistently', () => {
@@ -62,6 +70,17 @@ describe('Google Sheets sync merge', () => {
     expect(row).toEqual({ id: 'x', quantidade: 3, estoque_minimo: 0, motivo: null })
   })
 
+  it('accepts legacy order headers containing the removed deposit column', () => {
+    const oldHeaders = [
+      'id', 'cliente_id', 'data_entrega', 'status', 'sinal_cents', 'total_cents', 'observacoes',
+      'created_at', 'updated_at', 'deleted_at', 'device_id',
+    ]
+    const currentHeaders = oldHeaders.filter((column) => column !== 'sinal_cents')
+
+    expect(colunasCompativeis(oldHeaders, currentHeaders)).toBe(true)
+    expect(colunasCompativeis([...oldHeaders, 'device_id'], currentHeaders)).toBe(true)
+  })
+
   it('rebuilds inventory totals from merged movements instead of last-write-wins balances', () => {
     const data = {
       insumo: [{ id: 'flour', estoque_atual: 8 }],
@@ -77,6 +96,7 @@ describe('Google Sheets sync merge', () => {
     reconstruirSaldosSincronizados(data)
     expect(data.insumo[0].estoque_atual).toBe(7)
     expect(data.produto_variante[0].estoque_atual).toBe(3)
+    expect(data.movimento_estoque.map((movement) => movement.sequencia)).toEqual([1, 2, 3, 4, 5])
   })
 
   it('defers foreign keys while replacing sync tables in a single transaction', async () => {

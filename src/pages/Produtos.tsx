@@ -218,9 +218,11 @@ export default function Produtos() {
       return
     }
     const quantity = perda ? -amount : amount
-    const reason = perda || Number(variant.estoque_atual) + quantity < 0
-      ? window.prompt(perda ? 'Informe o motivo da perda:' : 'Informe o motivo do saldo negativo:')?.trim() ?? ''
-      : ''
+    const reason = window.prompt(perda ? 'Informe o motivo da perda:' : 'Informe o motivo do ajuste:')?.trim() ?? ''
+    if (!reason) {
+      setErro('Informe o motivo da movimentação.')
+      return
+    }
     try {
       await ajustarEstoque(db, {
         tipo: 'variante', id: variant.id, quantidade: quantity, motivo: reason,
@@ -347,7 +349,7 @@ export default function Produtos() {
           {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
         </button>
         <button className="bt" disabled={!nome.trim() || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
-          {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar produto'}
+          {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
         </button>
         {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
       </section></div>}

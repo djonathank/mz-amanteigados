@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { openDb, type Db } from './db'
+import AppLoading from '../AppLoading'
 
 const Ctx = createContext<Db | null>(null)
 
@@ -17,7 +18,7 @@ export function DbProvider({ children }: { children: ReactNode }) {
     openDb().then(setDb).catch((e) => setErro(String(e?.message ?? e)))
   }, [])
 
-  if (erro) return <p className="sb">Não foi possível abrir os dados: {erro}</p>
-  if (!db) return <p className="sb">Abrindo seus dados...</p>
+  if (erro) return <p className="sb" role="alert">Não foi possível abrir os dados: {erro}</p>
+  if (!db) return <AppLoading />
   return <Ctx.Provider value={db}>{children}</Ctx.Provider>
 }

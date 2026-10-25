@@ -5,7 +5,7 @@ import { criarPdf } from '../data/pdf'
 import { gerarCsv, type RelatorioTabela } from '../data/reports'
 import { formatBRL } from '../domain/money'
 import { formatBRDate, localDateAfterIso, localDateStartIso, localDateString } from '../domain/date'
-import { Campo } from './ui'
+import { SeletorData } from './ui'
 
 interface ResumoRow {
   vendas: number; total_cents: number; pagas_cents: number; pendentes_cents: number; lucro_cents: number
@@ -166,8 +166,8 @@ export default function Relatorios() {
       {erro && <p className="notice error" role="alert">{erro}</p>}
       <section className="cd">
         <div className="g">
-          <Campo rotulo="De" id="relatorio.inicio" tipo="date" valor={inicio} onChange={setInicio} />
-          <Campo rotulo="Até" id="relatorio.fim" tipo="date" valor={fim} onChange={setFim} />
+          <SeletorData rotulo="De" id="relatorio.inicio" valor={inicio} onChange={setInicio} />
+          <SeletorData rotulo="Até" id="relatorio.fim" valor={fim} onChange={setFim} />
         </div>
         <button className="bt" disabled={carregando} onClick={() => void consultar()} data-testid="relatorio.consultar">
           {carregando ? 'Consultando...' : 'Gerar relatório'}
@@ -190,6 +190,7 @@ export default function Relatorios() {
         </section>
         <section className="cd"><h2>Melhores clientes</h2>
           {clientes.map((row) => <div className="r" key={row.nome}><span>{row.nome}<small>{row.vendas} vendas</small></span><b>{formatBRL(row.faturamento_cents)}</b></div>)}
+          {!clientes.length && <p className="notice">Não há melhores clientes neste período</p>}
         </section>
         <section className="cd"><h2>Custo dos insumos</h2>
           {custos.map((row, index) => <div className="r" key={`${row.insumo}-${row.data}-${index}`}>

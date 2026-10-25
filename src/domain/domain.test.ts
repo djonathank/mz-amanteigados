@@ -3,13 +3,19 @@ import { ingredientsCost, lotCost, recipeBatchCost, usableUnits, weightedAverage
 import { formatBRL } from './money'
 import { canTransition } from './orders'
 import { lotCostAfterIncrease, profit, realMargin, simulateIngredientPriceIncrease, suggestedPrice, unitCost } from './pricing'
-import { costPerBase, toBase } from './units'
+import { costPerBase, formatQuantity, toBase } from './units'
 import type { Receita } from './types'
 
 describe('unidades', () => {
   it('converte para a unidade base', () => {
     expect(toBase(2, 'kg')).toBe(2000)
     expect(costPerBase(3800, 1, 'kg')).toBe(3.8)
+  })
+
+  it('formats stock quantities consistently for Brazilian Portuguese', () => {
+    expect(formatQuantity(12001.5)).toBe('12.001,5')
+    expect(formatQuantity(0.0001)).toBe('0,0001')
+    expect(formatQuantity(3)).toBe('3')
   })
 })
 

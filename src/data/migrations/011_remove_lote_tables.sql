@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_lote_validade;
+DROP TABLE IF EXISTS lote_saida;
+DROP TABLE IF EXISTS lote;
