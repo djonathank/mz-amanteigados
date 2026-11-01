@@ -34,7 +34,7 @@ CREATE TABLE produto (
 );
 CREATE TABLE produto_variante (
   id TEXT PRIMARY KEY,
-  produto_id TEXT NOT NULL REFERENCES produto(id), nome TEXT NOT NULL, peso_g REAL, unidades_por_pacote INTEGER, embalagem_insumo_id TEXT, rotulo_insumo_id TEXT, preco_cents INTEGER NOT NULL DEFAULT 0, estoque_atual REAL NOT NULL DEFAULT 0,
+  produto_id TEXT NOT NULL REFERENCES produto(id), nome TEXT NOT NULL, peso_g REAL, volume_ml REAL, unidades_por_pacote INTEGER, embalagem_insumo_id TEXT, rotulo_insumo_id TEXT, preco_cents INTEGER NOT NULL DEFAULT 0, estoque_atual REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
 );
 CREATE TABLE compra (

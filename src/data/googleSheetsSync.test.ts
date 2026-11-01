@@ -109,6 +109,7 @@ describe('Google Sheets sync merge', () => {
     const db: Db = {
       query: async () => [],
       run: async (sql) => { calls.push(sql) },
+      runSet: async () => {},
       transaction: async (operation) => operation(),
     }
     const schema = emptyTables<{ name: string; type: string; notnull: number; pk: number; dflt_value: unknown }>()
@@ -126,6 +127,7 @@ describe('Google Sheets sync merge', () => {
         table: 'venda_item', rowid: 17, parent: 'produto_variante', fkid: 0,
       }] as T[],
       run: async () => { },
+      runSet: async () => {},
       transaction: async (operation) => operation(),
     }
     const schema = emptyTables<{ name: string; type: string; notnull: number; pk: number; dflt_value: unknown }>()

@@ -5,7 +5,7 @@ import { useGoogleSync } from '../data/GoogleSyncContext'
 import { lerConfig, salvarConfig } from '../data/repos'
 import { AVATAR_DEFAULT, carregarAvatar } from './avatar'
 import { ConfirmacaoAcao, MensagemModal } from './ui'
-import { criarBackup, importarBackup, validarBackup } from '../data/backup'
+import { criarBackup, importarBackup, LIMITE_BACKUP_BYTES, validarBackup } from '../data/backup'
 
 const normalizarNomeUsuario = (valor: string) => valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 60)
 
@@ -187,6 +187,9 @@ export default function MenuUsuario() {
     if (!arquivo) return
     setErro('')
     try {
+      if (arquivo.size > LIMITE_BACKUP_BYTES) {
+        throw new Error('O arquivo de backup excede o limite de 50 MB.')
+      }
       const texto = await arquivo.text()
       const preview = await validarBackup(db, texto)
       if (!preview.valido) throw new Error(preview.erros.join(' '))

@@ -254,11 +254,10 @@ export async function substituirTabelas(db: Db, schema: Record<SyncTable, Column
     for (const table of [...SYNC_TABLES].reverse()) await db.run(`DELETE FROM ${table}`)
     for (const table of SYNC_TABLES) {
       const columns = schema[table].map((column) => column.name)
-      for (const row of data[table]) {
-        await db.run(
-          `INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`,
-          columns.map((column) => row[column] ?? null),
-        )
+      const sql = `INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`
+      const rows = data[table].map((row) => columns.map((column) => row[column] ?? null))
+      for (let start = 0; start < rows.length; start += 500) {
+        await db.runSet(sql, rows.slice(start, start + 500))
       }
     }
     const violations = await db.query<{ table: string; rowid: number; parent: string; fkid: number }>(
@@ -328,14 +327,24 @@ function normalizarCabecalho(column: string): string {
 }
 
 async function googleRequest<T = void>(url: string, token: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  })
+  let response: Response | undefined
+  for (let attempt = 0; attempt < 3; attempt++) {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      signal: AbortSignal.timeout(30_000),
+    }).catch((error: unknown) => {
+      if (attempt === 2) throw error
+      return undefined
+    })
+    if (response?.ok || (response && response.status !== 429 && response.status < 500)) break
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (2 ** attempt)))
+  }
+  if (!response) throw new Error('Não foi possível conectar aos serviços Google.')
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: { message?: string } }
     throw new Error(body.error?.message ?? `Google API retornou HTTP ${response.status}.`)

@@ -20,6 +20,7 @@ const web = Capacitor.getPlatform() === 'web'
 export interface Db {
   query<T>(sql: string, params?: unknown[]): Promise<T[]>
   run(sql: string, params?: unknown[]): Promise<void>
+  runSet(sql: string, rows: unknown[][]): Promise<void>
   transaction(fn: () => Promise<void>): Promise<void>
   clearData(): Promise<void>
 }
@@ -27,6 +28,16 @@ export interface Db {
 let aberto: Promise<Db> | null = null
 const onChangeListeners = new Set<() => void>()
 let suspenderNotificacoes = 0
+
+async function executarSqlIndividual(conn: { execute: (sql: string) => Promise<unknown> }, sql: string) {
+  const statements = sql
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter(Boolean)
+  for (const statement of statements) {
+    await conn.execute(`${statement};`)
+  }
+}
 
 export const subscribeDatabaseChanges = (listener: () => void) => {
   onChangeListeners.add(listener)
@@ -72,21 +83,17 @@ async function abrir(): Promise<Db> {
       .filter((l) => !l.startsWith('--') && !l.startsWith('PRAGMA'))
       .join('\n')
       .replace(/CREATE TABLE(?! IF NOT EXISTS)/gi, 'CREATE TABLE IF NOT EXISTS')
-    await conn.execute(sql)
+    await executarSqlIndividual(conn, sql)
     await conn.run('INSERT OR REPLACE INTO _migracoes (versao) VALUES (1)', [], false)
   }
   const feita2 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 2')
   if (!feita2.values?.length) {
-    const receitaColumns = await conn.query('PRAGMA table_info(receita)')
-    if ((receitaColumns.values ?? []).some((col) => col.name === 'passos_preparo')) {
-      await conn.execute('ALTER TABLE receita DROP COLUMN passos_preparo')
-    }
     await conn.run('INSERT OR REPLACE INTO _migracoes (versao) VALUES (2)', [], false)
   }
   const feita3 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 3')
   if (!feita3.values?.length) {
     const cols = await conn.query('PRAGMA table_info(produto_variante)')
-    if (!(cols.values ?? []).some((c: any) => c.name === 'volume_ml')) {
+    if (!(cols.values ?? []).some((c: any) => c.name === 'volume_ml') && cols.values?.length) {
       const sql = phase1b.split('\n').filter((l) => !l.startsWith('--') && l.trim()).join('\n')
       await conn.execute(sql)
     } else {
@@ -240,6 +247,14 @@ async function abrir(): Promise<Db> {
     },
     async run(sql: string, params: unknown[] = []) {
       await conn.run(sql, params as any[], false)
+      if (!emTransacao) {
+        await persistir()
+        notifyDatabaseChanged()
+      }
+    },
+    async runSet(sql: string, rows: unknown[][]) {
+      if (!rows.length) return
+      await conn.executeSet(rows.map((values) => ({ statement: sql, values })), false)
       if (!emTransacao) {
         await persistir()
         notifyDatabaseChanged()

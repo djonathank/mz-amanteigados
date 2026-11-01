@@ -2,6 +2,8 @@ import type { Db } from './db'
 import { SYNC_TABLES, type SyncTable } from './googleSheetsSync'
 
 type Column = { name: string; type: string; notnull: number; pk: number; dflt_value: unknown }
+export const LIMITE_BACKUP_BYTES = 50 * 1024 * 1024
+export const LIMITE_BACKUP_REGISTROS = 100_000
 
 export interface BackupPreview {
   valido: boolean
@@ -18,6 +20,13 @@ export async function criarBackup(db: Db): Promise<string> {
 }
 
 export async function validarBackup(db: Db, texto: string): Promise<BackupPreview> {
+  if (new TextEncoder().encode(texto).byteLength > LIMITE_BACKUP_BYTES) {
+    return {
+      valido: false,
+      totalRegistros: 0,
+      erros: ['O arquivo de backup excede o limite de 50 MB.'],
+    }
+  }
   let payload: unknown
   try {
     payload = JSON.parse(texto)
@@ -46,6 +55,10 @@ export async function validarBackup(db: Db, texto: string): Promise<BackupPrevie
       continue
     }
     totalRegistros += rows.length
+    if (totalRegistros > LIMITE_BACKUP_REGISTROS) {
+      erros.push(`O backup excede o limite de ${LIMITE_BACKUP_REGISTROS.toLocaleString('pt-BR')} registros.`)
+      break
+    }
     const columns = await db.query<Column>(`PRAGMA table_info(${table})`)
     const allowed = new Set(columns.map((column) => column.name))
     for (const [index, row] of rows.entries()) {
@@ -73,13 +86,15 @@ export async function importarBackup(db: Db, texto: string): Promise<void> {
     for (const table of SYNC_TABLES) {
       const rows = payload.dados[table] ?? []
       const columns = await db.query<Column>(`PRAGMA table_info(${table})`)
-      for (const row of rows) {
-        const columnNames = columns.map((column) => column.name).filter((name) => Object.prototype.hasOwnProperty.call(row, name))
+      const columnNames = columns.map((column) => column.name).filter((name) =>
+        rows.some((row) => Object.prototype.hasOwnProperty.call(row, name)))
+      for (let start = 0; start < rows.length; start += 500) {
+        const batch = rows.slice(start, start + 500)
         if (!columnNames.length) continue
         const placeholders = columnNames.map(() => '?').join(', ')
-        await db.run(
+        await db.runSet(
           `INSERT INTO ${table} (${columnNames.join(', ')}) VALUES (${placeholders})`,
-          columnNames.map((name) => row[name]),
+          batch.map((row) => columnNames.map((name) => Object.prototype.hasOwnProperty.call(row, name) ? row[name] ?? null : null)),
         )
       }
     }
