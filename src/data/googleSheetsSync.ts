@@ -92,7 +92,7 @@ export async function sincronizarPlanilha(
   for (const [index, table] of SYNC_TABLES.entries()) {
     const columns = schema[table]
     const values = valueRanges[index + 1]?.values ?? []
-    const headers = values[0]?.map(String) ?? []
+    const headers = (values[0]?.map(String) ?? []).map(normalizarCabecalho)
     if (!colunasCompativeis(headers, columns.map((column) => column.name))) {
       throw new Error(`As colunas da aba "${table}" não correspondem ao esquema do aplicativo.`)
     }
@@ -296,12 +296,15 @@ async function escreverPlanilha(
 }
 
 export function colunasCompativeis(left: string[], right: string[]): boolean {
-  const normalized = left.filter((column) => column !== 'sinal_cents')
-  const currentColumns = normalized.slice(0, right.length)
-  const trailingLegacyColumns = normalized.slice(right.length)
-  return currentColumns.length <= right.length
-    && currentColumns.every((column, index) => column === right[index])
-    && trailingLegacyColumns.every((column) => column === right[right.length - 1])
+  const cleaned = left.map(normalizarCabecalho)
+  const duplicateColumns = cleaned.filter((column, index) => cleaned.indexOf(column) !== index)
+  if (duplicateColumns.some((column) => column !== 'device_id')) return false
+  const normalized = cleaned.filter((column) => column !== 'sinal_cents')
+  return normalized.every((column) => right.includes(column))
+}
+
+function normalizarCabecalho(column: string): string {
+  return column.trim().replace(/^\uFEFF/, '')
 }
 
 async function googleRequest<T = void>(url: string, token: string, options: RequestInit = {}): Promise<T> {

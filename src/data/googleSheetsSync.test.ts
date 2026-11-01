@@ -59,7 +59,7 @@ describe('Google Sheets sync merge', () => {
 
   it('accepts an older header as a prefix during schema upgrades', () => {
     expect(colunasCompativeis(['id', 'quantidade'], ['id', 'quantidade', 'motivo'])).toBe(true)
-    expect(colunasCompativeis(['quantidade', 'id'], ['id', 'quantidade', 'motivo'])).toBe(false)
+    expect(colunasCompativeis(['quantidade', 'id'], ['id', 'quantidade', 'motivo'])).toBe(true)
     const row = parseSheetRow(['x', 3], [
       { name: 'id', type: 'TEXT', notnull: 1, pk: 1, dflt_value: null },
       { name: 'quantidade', type: 'REAL', notnull: 1, pk: 0, dflt_value: null },
