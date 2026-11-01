@@ -1,7 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { CapacitorSQLite, SQLiteConnection } from '@capacitor-community/sqlite'
 import init from './migrations/001_init.sql?raw'
-import phase1 from './migrations/002_phase1_fields.sql?raw'
 import phase1b from './migrations/003_variant_volume.sql?raw'
 import phase1d from './migrations/005_config_sync_timestamp.sql?raw'
 import phases2to4 from './migrations/007_phase2_4.sql?raw'
@@ -65,19 +64,24 @@ async function abrir(): Promise<Db> {
 
   await conn.execute('CREATE TABLE IF NOT EXISTS _migracoes (versao INTEGER PRIMARY KEY)')
   const feita = await conn.query('SELECT versao FROM _migracoes WHERE versao = 1')
-  if (!feita.values?.length) {
-    const sql = init.split('\n').filter((l) => !l.startsWith('--') && !l.startsWith('PRAGMA')).join('\n')
+  const tabelasBase = await conn.query(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='receita'",
+  )
+  if (!feita.values?.length || !tabelasBase.values?.length) {
+    const sql = init.split('\n')
+      .filter((l) => !l.startsWith('--') && !l.startsWith('PRAGMA'))
+      .join('\n')
+      .replace(/CREATE TABLE(?! IF NOT EXISTS)/gi, 'CREATE TABLE IF NOT EXISTS')
     await conn.execute(sql)
-    await conn.run('INSERT INTO _migracoes (versao) VALUES (1)', [], false)
+    await conn.run('INSERT OR REPLACE INTO _migracoes (versao) VALUES (1)', [], false)
   }
   const feita2 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 2')
   if (!feita2.values?.length) {
-    const cols = await conn.query('PRAGMA table_info(receita)')
-    if (!(cols.values ?? []).some((c: any) => c.name === 'passos_preparo')) {
-      const sql = phase1.split('\n').filter((l) => !l.startsWith('--') && l.trim()).join('\n')
-      await conn.execute(sql)
+    const receitaColumns = await conn.query('PRAGMA table_info(receita)')
+    if ((receitaColumns.values ?? []).some((col) => col.name === 'passos_preparo')) {
+      await conn.execute('ALTER TABLE receita DROP COLUMN passos_preparo')
     }
-    await conn.run('INSERT INTO _migracoes (versao) VALUES (2)', [], false)
+    await conn.run('INSERT OR REPLACE INTO _migracoes (versao) VALUES (2)', [], false)
   }
   const feita3 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 3')
   if (!feita3.values?.length) {

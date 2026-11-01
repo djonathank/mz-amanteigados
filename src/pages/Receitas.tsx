@@ -105,7 +105,6 @@ export default function Receitas() {
     perda_pct: Number(perda) / 100,
     tempo_min: Number(tempo) || 0,
     modo_preparo: modo,
-    passos_preparo: null,
   }
   const itensTemporarios: ItemRow[] = linhas.map((linha, index) => ({
     id: `rascunho-${index}`,
@@ -183,11 +182,7 @@ export default function Receitas() {
       setUnidade(unidadeEdicao)
       setPerda(String(selecionada.perda_pct * 100))
       setTempo(selecionada.tempo_min == null ? '' : String(selecionada.tempo_min))
-      const parsedSteps: unknown = selecionada.passos_preparo ? JSON.parse(selecionada.passos_preparo) : []
-      const etapas = Array.isArray(parsedSteps)
-        ? parsedSteps.filter((step): step is string => typeof step === 'string' && step.trim() !== '')
-        : []
-      setModo([selecionada.modo_preparo?.trim(), ...etapas].filter(Boolean).join('\n'))
+      setModo(selecionada.modo_preparo?.trim() ?? '')
       setLinhas(filhos.map((item) => item.insumo_id
         ? { tipo: 'insumo', id: item.insumo_id, quantidadeBase: item.quantidade_base }
         : item.subreceita_id ? { tipo: 'subreceita', id: item.subreceita_id, quantidadeBase: item.quantidade_base } : null
@@ -229,7 +224,6 @@ export default function Receitas() {
         perdaPct: Number(perda) / 100,
         tempoMin: tempo ? Number(tempo) : null,
         modoPreparo: modo,
-        passosPreparo: [],
         itens: inputs,
       })
     } catch (e) {

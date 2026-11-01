@@ -227,7 +227,6 @@ export interface ReceitaRow {
   perda_pct: number
   tempo_min: number | null
   modo_preparo: string | null
-  passos_preparo: string | null
 }
 
 export interface ItemRow {
@@ -240,7 +239,7 @@ export interface ItemRow {
 
 export const listarReceitas = (db: Db) =>
   db.query<ReceitaRow>(
-    'SELECT id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo, passos_preparo FROM receita WHERE deleted_at IS NULL ORDER BY nome',
+    'SELECT id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo FROM receita WHERE deleted_at IS NULL ORDER BY nome',
   )
 
 export const buscarInsumo = async (db: Db, id: string) => {
@@ -253,7 +252,7 @@ export const buscarInsumo = async (db: Db, id: string) => {
 
 export const buscarReceita = async (db: Db, id: string) => {
   const [row] = await db.query<ReceitaRow>(
-    'SELECT id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo, passos_preparo FROM receita WHERE id=? AND deleted_at IS NULL',
+    'SELECT id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo FROM receita WHERE id=? AND deleted_at IS NULL',
     [id],
   )
   return row
@@ -280,7 +279,6 @@ export async function salvarReceita(
     perdaPct: number
     tempoMin?: number | null
     modoPreparo?: string
-    passosPreparo?: string[]
     itens: ReceitaItemInput[]
   },
 ) {
@@ -307,18 +305,18 @@ export async function salvarReceita(
   await db.transaction(async () => {
     if (r.id) {
       await db.run(
-        `UPDATE receita SET nome=?, rendimento_qtd=?, rendimento_unidade=?, perda_pct=?, tempo_min=?, modo_preparo=?, passos_preparo=?, updated_at=?
+        `UPDATE receita SET nome=?, rendimento_qtd=?, rendimento_unidade=?, perda_pct=?, tempo_min=?, modo_preparo=?, updated_at=?
          WHERE id=? AND deleted_at IS NULL`,
         [nome, r.rendimento, r.rendimentoUnidade ?? 'un', r.perdaPct, r.tempoMin ?? null,
-          r.modoPreparo?.trim() || null, JSON.stringify(r.passosPreparo ?? []), t, id],
+          r.modoPreparo?.trim() || null, t, id],
       )
       // Keep deletion tombstones so the sheet sync does not restore old ingredients.
       await db.run('UPDATE receita_item SET deleted_at=?, updated_at=? WHERE receita_id=? AND deleted_at IS NULL', [t, t, id])
     } else {
       await db.run(
-        'INSERT INTO receita (id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo, passos_preparo, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        'INSERT INTO receita (id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)',
         [id, nome, r.rendimento, r.rendimentoUnidade ?? 'un', r.perdaPct, r.tempoMin ?? null,
-          r.modoPreparo?.trim() || null, JSON.stringify(r.passosPreparo ?? []), t, t],
+          r.modoPreparo?.trim() || null, t, t],
       )
     }
     for (const item of r.itens) {

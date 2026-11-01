@@ -4,7 +4,8 @@
 **Plataformas:** Android, iOS e web (um único código)
 **Idioma e formatos:** pt-BR, moeda R$, datas dd/mm/aaaa, unidades g, kg, ml, L e un
 **Referência visual:** galeria de 23 telas (22 aprovadas + sincronização) (mesmo link do design)
-**Versão do documento:** 2.0 (Fases 1 a 4: operação local + espelho em Google Sheets)
+**Versão do documento:** 2.1 (Fases 1 a 4: operação local, backup JSON e espelho em Google Sheets)
+**Versão do aplicativo Android:** 1.2 (`versionCode 3`)
 
 ---
 

@@ -9,7 +9,7 @@ describe('custos de variantes', () => {
         { id: 'package', nome: 'Embalagem', tipo: 'embalagem', unidade_base: 'un', unidade_compra: 'un', fator_compra: 1, custo_medio: 25 },
       ],
       receitas: [
-        { id: 'recipe', nome: 'Xarope', rendimento_qtd: 1000, rendimento_unidade: 'ml', perda_pct: 0, tempo_min: 0, modo_preparo: null, passos_preparo: null },
+        { id: 'recipe', nome: 'Xarope', rendimento_qtd: 1000, rendimento_unidade: 'ml', perda_pct: 0, tempo_min: 0, modo_preparo: null },
       ],
       itens: [{ id: 'item', receita_id: 'recipe', insumo_id: 'water', subreceita_id: null, quantidade_base: 1000 }],
       variantes: [],
@@ -27,7 +27,7 @@ describe('custos de variantes', () => {
   it('keeps liquid quantities from backups created before the volume column', () => {
     const base: Base = {
       insumos: [{ id: 'base', nome: 'Base', tipo: 'ingrediente', unidade_base: 'ml', unidade_compra: 'ml', fator_compra: 1, custo_medio: 0.2 }],
-      receitas: [{ id: 'recipe', nome: 'Xarope', rendimento_qtd: 1000, rendimento_unidade: 'ml', perda_pct: 0, tempo_min: 0, modo_preparo: null, passos_preparo: null }],
+      receitas: [{ id: 'recipe', nome: 'Xarope', rendimento_qtd: 1000, rendimento_unidade: 'ml', perda_pct: 0, tempo_min: 0, modo_preparo: null }],
       itens: [{ id: 'item', receita_id: 'recipe', insumo_id: 'base', subreceita_id: null, quantidade_base: 1000 }],
       variantes: [],
       config: {},

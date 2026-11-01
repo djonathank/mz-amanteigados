@@ -21,14 +21,13 @@ describe('Phase 1 data operations', () => {
     const f = fakeDb()
     await salvarReceita(f.db, {
       nome: 'MASSA AMANTEIGADA', rendimento: 2, perdaPct: 0.1, tempoMin: 25,
-      modoPreparo: 'Misturar', passosPreparo: ['Pesar', 'Misturar'],
+      modoPreparo: 'Misturar',
       itens: [{ insumoId: 'farinha', quantidadeBase: 500 }, { subreceitaId: 'creme', quantidadeBase: 100 }],
     })
     expect(f.transactionCalls).toBe(1)
     expect(f.calls[0].params[1]).toBe('Massa amanteigada')
-    expect(f.calls[0].sql).toContain('passos_preparo')
     expect(f.calls[0].params[5]).toBe(25)
-    expect(f.calls[0].params[7]).toBe(JSON.stringify(['Pesar', 'Misturar']))
+    expect(f.calls[0].params[6]).toBe('Misturar')
     expect(f.calls.filter((call) => call.sql.includes('INSERT INTO receita_item'))).toHaveLength(2)
     expect(f.calls[2].params[3]).toBe('creme')
   })
@@ -42,7 +41,7 @@ describe('Phase 1 data operations', () => {
     expect(f.transactionCalls).toBe(1)
     expect(f.calls.some((call) => call.sql.includes('UPDATE receita SET'))).toBe(true)
     expect(f.calls.find((call) => call.sql.includes('UPDATE receita SET'))?.params[0]).toBe('Massa atualizada')
-    expect(f.calls.some((call) => call.sql.includes('DELETE FROM receita_item'))).toBe(true)
+    expect(f.calls.some((call) => call.sql.includes('UPDATE receita_item SET deleted_at='))).toBe(true)
     expect(f.calls.some((call) => call.sql.includes('INSERT INTO receita_item'))).toBe(true)
   })
 
