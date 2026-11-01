@@ -140,7 +140,7 @@ export async function salvarInsumo(
     const [atual] = await db.query<{ unidade_base: BaseUnit; tipo: string }>(
       'SELECT unidade_base, tipo FROM insumo WHERE id=? AND deleted_at IS NULL', [i.id],
     )
-    if (atual && atual.tipo !== (i.tipo ?? 'ingrediente')) throw new Error('O tipo do insumo não pode ser alterado durante a edição.')
+    if (atual && atual.tipo !== (i.tipo ?? 'ingrediente')) throw new Error('O tipo e a unidade base do insumo não podem ser alterados durante a edição.')
     if (!atual) throw new Error('O insumo que você tentou editar não foi encontrado.')
     if (atual.unidade_base !== baseOf(i.unidade)) {
       const [uso] = await db.query<{ total: number }>(

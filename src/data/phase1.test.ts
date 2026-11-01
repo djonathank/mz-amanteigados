@@ -4,7 +4,8 @@ import { localDateString } from '../domain/date'
 import { importarBackup, validarBackup } from './backup'
 import { atualizarPagamentoCompra, excluirInsumo, listarCompras, registrarCompra, salvarInsumo, salvarProduto, salvarReceita } from './repos'
 
-function fakeDb(queryRows: (sql: string) => unknown[] = () => []) {
+function fakeDb(queryRows: (sql: string) => unknown[] = (sql) =>
+  sql.includes('SELECT id FROM receita WHERE id=?') ? [{ id: 'recipe' }] : []) {
   const calls: { sql: string; params: unknown[] }[] = []
   let transactionCalls = 0
   const db = {
@@ -56,7 +57,7 @@ describe('Phase 1 data operations', () => {
     const update = f.calls.find((call) => call.sql.includes('UPDATE insumo SET custo_medio'))
     expect(update?.params[0]).toBeCloseTo(3.2, 6)
     expect(update?.params[1]).toBe(10000)
-    expect(f.calls.some((call) => call.sql.includes("VALUES (?,?,?,?,?,?,?,?,?,?)") && call.params[3] === 'compra')).toBe(true)
+    expect(f.calls.some((call) => call.sql.includes("VALUES (?,?,?,?,?,?,?,?,?,?,?)") && call.params[3] === 'compra')).toBe(true)
   })
 
   it('updates the average cost when a purchase is cheaper than the current cost', async () => {

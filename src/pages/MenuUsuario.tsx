@@ -5,6 +5,7 @@ import { useGoogleSync } from '../data/GoogleSyncContext'
 import { lerConfig, salvarConfig } from '../data/repos'
 import { AVATAR_DEFAULT, carregarAvatar } from './avatar'
 import { ConfirmacaoAcao, MensagemModal } from './ui'
+import { criarBackup, importarBackup, validarBackup } from '../data/backup'
 
 const normalizarNomeUsuario = (valor: string) => valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 60)
 
@@ -21,6 +22,7 @@ export default function MenuUsuario() {
   const [salvandoAvatar, setSalvandoAvatar] = useState(false)
   const [confirmarReconexao, setConfirmarReconexao] = useState(false)
   const seletorImagem = useRef<HTMLInputElement>(null)
+  const seletorBackup = useRef<HTMLInputElement>(null)
   const nomeOriginal = useRef('')
   const [erroGoogleFechado, setErroGoogleFechado] = useState('')
 
@@ -159,6 +161,40 @@ export default function MenuUsuario() {
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
+
+  }
+
+  const exportarBackup = async () => {
+    setErro('')
+    try {
+      const conteudo = await criarBackup(db)
+      const arquivo = new Blob([conteudo], { type: 'application/json' })
+      const url = URL.createObjectURL(arquivo)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `mz-gestao-backup-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setMensagem('Backup exportado com sucesso.')
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const restaurarBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    const arquivo = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (!arquivo) return
+    setErro('')
+    try {
+      const texto = await arquivo.text()
+      const preview = await validarBackup(db, texto)
+      if (!preview.valido) throw new Error(preview.erros.join(' '))
+      await importarBackup(db, texto)
+      setMensagem(`Backup restaurado com ${preview.totalRegistros} registros.`)
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
   }
 
   return (
@@ -268,6 +304,15 @@ export default function MenuUsuario() {
             ? 'A planilha Google é o armazenamento permanente. Alterações offline são sincronizadas quando a conexão voltar. Reconectar substitui os dados locais pelos da planilha.'
             : 'Entre com uma conta Google para acessar e sincronizar seus dados.'}
         </p>
+      </section>
+      <section className="cd" aria-labelledby="backup-title">
+        <h2 id="backup-title">Backup local</h2>
+        <p className="helper">Exporte uma cópia completa dos dados ou restaure um arquivo de backup.</p>
+        <input ref={seletorBackup} className="avatar-file-input" type="file" accept=".json,application/json" aria-label="Escolher backup" onChange={(event) => void restaurarBackup(event)} />
+        <div className="g">
+          <button className="bt o" type="button" onClick={() => void exportarBackup()}>Exportar backup</button>
+          <button className="bt o" type="button" onClick={() => seletorBackup.current?.click()}>Restaurar backup</button>
+        </div>
       </section>
       {confirmarReconexao && <ConfirmacaoAcao
         id="google-confirmar-reconexao"

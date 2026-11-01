@@ -4,6 +4,7 @@ import { useDb } from '../data/DbContext'
 import { formatBRL } from '../domain/money'
 import { Icon } from './ui'
 import { carregarAvatar } from './avatar'
+import { maisOpcoes } from './Mais'
 
 interface Resumo {
   faturamentoMes: number
@@ -104,9 +105,15 @@ export default function Inicio() {
           </section>
 
           <section className="cd home-links">
-            <h2>Comece por aqui</h2>
-            <Link to="/precificacao" className="r"><span className="ic"><Icon name="price" /></span><span>Precificar produto<small>Calcule preço e margem</small></span><span aria-hidden="true">›</span></Link>
-            <Link to="/mais" className="r"><span className="ic"><Icon name="more" /></span><span>Mais opções<small>Produtos, custos e sincronização</small></span><span aria-hidden="true">›</span></Link>
+            <h2>Acesso rápido</h2>
+            <div className="home-options-carousel" aria-label="Opções do menu Mais">
+              {maisOpcoes.map((opcao) => (
+                <Link className="home-option-card" to={opcao.to} key={opcao.to}>
+                  <span className="ic"><Icon name={opcao.icon} /></span>
+                  <span>{opcao.titulo}</span>
+                </Link>
+              ))}
+            </div>
           </section>
         </>
       )}
