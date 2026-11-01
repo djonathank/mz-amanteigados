@@ -7,7 +7,12 @@ import { listarClientes, salvarEncomenda, type ClienteRow } from '../data/phase3
 import { formatBRL } from '../domain/money'
 import { Campo, FecharModal, Selecao, SeletorData } from './ui'
 
-const FORMAS: [string, string][] = [['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']]
+const FORMAS: [string, string][] = [
+  ['pix', 'Pix'],
+  ['dinheiro', 'Dinheiro'],
+  ['cartao_debito', 'Cartão de débito'],
+  ['cartao_credito', 'Cartão de crédito'],
+]
 const padraoData = () => {
   const hoje = new Date()
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`
@@ -17,6 +22,9 @@ const proximoDia = (data: string) => {
   proximo.setDate(proximo.getDate() + 1)
   return `${proximo.getFullYear()}-${String(proximo.getMonth() + 1).padStart(2, '0')}-${String(proximo.getDate()).padStart(2, '0')}`
 }
+const nomeProdutoVenda = (nome: string, limite: number) =>
+  nome.length > limite ? `${nome.slice(0, limite)}...` : nome
+
 export default function Vender() {
   const db = useDb()
   const nav = useNavigate()
@@ -52,6 +60,8 @@ export default function Vender() {
   const hoje = padraoData()
   const dataMinimaEncomenda = proximoDia(hoje)
   const mudar = (id: string, d: number) => setCarrinho((atual) => ({ ...atual, [id]: Math.max(0, (atual[id] ?? 0) + d) }))
+  const estoqueAgendadoInsuficiente = modo === 'agendada' && itens.some((item) =>
+    (item.estoque_atual ?? 0) <= 0 || carrinho[item.id] > (item.estoque_atual ?? 0))
   const finalizar = async (motivoEstoqueNegativo?: string) => {
     if (!itens.length || salvando || !clienteId || (modo === 'agora' && (!forma || descontoCents > subtotal))
       || (modo === 'agendada' && (!dataEntrega || dataEntrega < dataMinimaEncomenda))) return
@@ -59,13 +69,17 @@ export default function Vender() {
     setErro('')
     try {
       if (modo === 'agendada') {
-        await salvarEncomenda(db, {
+        if (estoqueAgendadoInsuficiente && !motivoEstoqueNegativo) {
+          setMotivoEstoquePendente('O pedido possui produto com estoque zerado ou negativo. Informe o motivo para confirmar o agendamento.')
+          return
+        }
+        const encomendaId = await salvarEncomenda(db, {
           clienteId: clienteId || undefined,
           dataEntrega,
-          observacoes,
+          observacoes: [observacoes, motivoEstoqueNegativo ? `Motivo do estoque: ${motivoEstoqueNegativo}` : ''].filter(Boolean).join('\n'),
           itens: itens.map((v) => ({ varianteId: v.id, quantidade: carrinho[v.id], precoUnitCents: v.preco_cents })),
         })
-        nav('/encomendas')
+        nav('/encomendas', { state: { pedidoAgendado: true, encomendaId } })
         return
       }
       const venda = (reason?: string) => registrarVenda(db, {
@@ -80,7 +94,7 @@ export default function Vender() {
         id = await venda(motivoEstoqueNegativo)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        if (motivoEstoqueNegativo || !message.includes('Informe o motivo para confirmar saldo negativo')) throw error
+        if (motivoEstoqueNegativo || (!message.includes('estoque insuficiente') && !message.includes('saldo negativo'))) throw error
         setMotivoEstoquePendente(message)
         return
       }
@@ -114,7 +128,7 @@ export default function Vender() {
         {base.variantes.map((v) => (
           <button className="tl" key={v.id} data-testid="venda.produto" onClick={() => mudar(v.id, 1)}>
             <span className="product-add" aria-hidden="true">+</span>
-            <strong>{v.produto_nome}</strong><b>{v.nome}</b>{formatBRL(v.preco_cents)}
+            <strong title={v.produto_nome}>{nomeProdutoVenda(v.produto_nome, 18)}</strong><b>{v.nome}</b>{formatBRL(v.preco_cents)}
           </button>
         ))}
         </div>
@@ -123,7 +137,7 @@ export default function Vender() {
           <h2>{modo === 'agendada' ? 'Venda agendada' : 'Sua venda'}</h2>
           <div className="cart-lines">
             {itens.map((item) => <div className="r cart-line" key={item.id}>
-              <span>{item.produto_nome}<small>{item.nome} · {formatBRL(item.preco_cents * carrinho[item.id])}</small></span>
+              <span title={item.produto_nome}>{nomeProdutoVenda(item.produto_nome, 25)}<small>{item.nome} · {formatBRL(item.preco_cents * carrinho[item.id])}</small></span>
               <div className="quantity-controls" aria-label={`Quantidade de ${item.produto_nome} ${item.nome}`}>
                 <button className="lk" type="button" aria-label={`Remover uma unidade de ${item.nome}`} onClick={() => mudar(item.id, -1)}>−</button>
                 <b>{carrinho[item.id]}</b>
@@ -156,16 +170,18 @@ export default function Vender() {
         </div>
       )}
       </>}
-      {motivoEstoquePendente && <section className="cd stock-modal" role="alertdialog" aria-modal="true" aria-labelledby="motivo-estoque-titulo">
-        <FecharModal onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }} />
-        <h2 id="motivo-estoque-titulo">Confirmar venda com estoque negativo</h2>
-        <p className="notice error">{motivoEstoquePendente}</p>
-        <Campo rotulo="Motivo" id="venda.motivo-estoque" valor={motivoEstoque} onChange={setMotivoEstoque} />
-        <div className="alert-actions">
-          <button className="lk" type="button" onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }}>Cancelar</button>
-          <button className="bt" type="button" disabled={!motivoEstoque.trim() || salvando} onClick={() => { setMotivoEstoquePendente(''); void finalizar(motivoEstoque.trim()) }}>Confirmar venda</button>
-        </div>
-      </section>}
+      {motivoEstoquePendente && <div className="alert-overlay">
+        <section className="cd stock-modal" role="alertdialog" aria-modal="true" aria-labelledby="motivo-estoque-titulo">
+          <FecharModal onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }} />
+          <h2 id="motivo-estoque-titulo">{modo === 'agendada' ? 'Confirmar pedido com estoque zerado ou negativo' : 'Confirmar venda com estoque zerado ou negativo'}</h2>
+          <p className="notice error">{motivoEstoquePendente}</p>
+          <Campo rotulo="Motivo" id="venda.motivo-estoque" valor={motivoEstoque} onChange={setMotivoEstoque} />
+          <div className="alert-actions">
+            <button className="bt o" type="button" onClick={() => { setMotivoEstoquePendente(''); setMotivoEstoque('') }}>Cancelar</button>
+            <button className="bt" type="button" disabled={!motivoEstoque.trim() || salvando} onClick={() => { setMotivoEstoquePendente(''); void finalizar(motivoEstoque.trim()) }}>{modo === 'agendada' ? 'Agendar pedido' : 'Confirmar venda'}</button>
+          </div>
+        </section>
+      </div>}
     </>
   )
 }

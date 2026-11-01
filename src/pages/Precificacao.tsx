@@ -7,6 +7,13 @@ import { formatBRL } from '../domain/money'
 import { profit, realMargin, suggestedPrice, unitCost } from '../domain/pricing'
 import { AlertaConclusao, Campo, MensagemModal, Selecao } from './ui'
 
+const resumirNomeProduto = (nome: string, limite = 40) => {
+  const caracteres = Array.from(nome.trim())
+  return caracteres.length <= limite
+    ? nome.trim()
+    : `${caracteres.slice(0, limite - 3).join('')}...`
+}
+
 export default function Precificacao() {
   const db = useDb()
   const [search] = useSearchParams()
@@ -172,7 +179,7 @@ export default function Precificacao() {
             id="preco.variante"
             valor={varianteId}
             onChange={(id) => { setVarianteId(id); setAviso('') }}
-            opcoes={[['manual', 'Informar custo da receita'], ...base.variantes.map((item) => [item.id, `${item.produto_nome} · ${item.nome}`] as [string, string])]}
+            opcoes={[['manual', 'Informar custo da receita'], ...base.variantes.map((item) => [item.id, resumirNomeProduto(`${item.produto_nome} · ${item.nome}`)] as [string, string])]}
           />
           {receita && <p className="helper">Receita: {receita.nome} · custo inclui ingredientes, tempo de preparo, gás, embalagem e rótulo.</p>}
         </div>
@@ -193,7 +200,7 @@ export default function Precificacao() {
         {!variante && (
           <>
             <Campo rotulo="Custo total da receita (R$)" id="preco.custo-receita" valor={custoReceita}
-              mascara="dinheiro" maxDigitos={5} onChange={(value) => { setCustoReceita(value); setErro(''); setErroCalculadoFechado('') }} />
+              mascara="dinheiro" maxDigitos={9} onChange={(value) => { setCustoReceita(value); setErro(''); setErroCalculadoFechado('') }} />
             <Campo rotulo="Rendimento por receita" id="preco.pacotes" valor={pacotes}
               mascara="inteiro" onChange={(value) => { setPacotes(value); setErro(''); setErroCalculadoFechado('') }} maxDigitos={3} />
           </>

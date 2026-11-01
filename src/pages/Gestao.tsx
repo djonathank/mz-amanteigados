@@ -18,6 +18,7 @@ interface Props { tela: Tela }
 
 const TIPOS_LANCAMENTO: [string, string][] = [['receita', 'Receita'], ['despesa', 'Despesa']]
 const STATUS_PAGAMENTO: [string, string][] = [['1', 'Pago'], ['0', 'Pendente']]
+const STATUS_RECEBIMENTO: [string, string][] = [['1', 'Recebido'], ['0', 'Pendente']]
 const padraoData = () => localDateString()
 const STATUS_ENCOMENDA: [string, string][] = [['todos', 'Todos'], ['agendado', 'Agendado'], ['finalizado', 'Finalizado'], ['cancelado', 'Cancelado']]
 const statusLabel: Record<EncomendaRow['status'], string> = {
@@ -56,6 +57,7 @@ export default function Gestao({ tela }: Props) {
   const [observacoes, setObservacoes] = useState('')
   const [tipo, setTipo] = useState<'receita' | 'despesa'>('despesa')
   const [categoria, setCategoria] = useState('')
+  const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(padraoData())
   const [vencimento, setVencimento] = useState('')
@@ -70,6 +72,31 @@ export default function Gestao({ tela }: Props) {
   const [exclusaoPendente, setExclusaoPendente] = useState<
     { tipo: 'cliente'; row: ClienteRow } | { tipo: 'fornecedor'; row: FornecedorRow } | null
   >(null)
+  const [cancelamentoPendente, setCancelamentoPendente] = useState<EncomendaRow | null>(null)
+  const [motivoCancelamentoPendente, setMotivoCancelamentoPendente] = useState<EncomendaRow | null>(null)
+  const [motivoCancelamentoPedido, setMotivoCancelamentoPedido] = useState('')
+  const [estoquePendente, setEstoquePendente] = useState<{ pedido: EncomendaRow; mensagem: string } | null>(null)
+  const [motivoEstoque, setMotivoEstoque] = useState('')
+  const [pedidoDestacado, setPedidoDestacado] = useState('')
+
+  useEffect(() => {
+    const state = location.state as { pedidoAgendado?: boolean; encomendaId?: string } | null
+    const pedidoAgendado = state?.pedidoAgendado
+    if (pedidoAgendado && tela === 'encomendas') {
+      setConfirmacao('Pedido agendado com sucesso.')
+      setFiltroAgenda('todos')
+      setPedidoDestacado(state?.encomendaId ?? '')
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location, navigate, tela])
+
+  useEffect(() => {
+    if (!pedidoDestacado) return
+    const timeout = window.setTimeout(() => {
+      document.getElementById(`pedido-${pedidoDestacado}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 300)
+    return () => window.clearTimeout(timeout)
+  }, [pedidoDestacado, encomendas])
 
   const carregar = useCallback(async () => {
     const [customerRows, supplierRows, orderRows, ledgerRows, categoryRows] = await Promise.all([
@@ -103,6 +130,7 @@ export default function Gestao({ tela }: Props) {
     setObservacoes('')
     setTipo('despesa')
     setCategoria('')
+    setDescricao('')
     setValor('')
     setData(padraoData())
     setVencimento('')
@@ -118,7 +146,7 @@ export default function Gestao({ tela }: Props) {
     try {
       setSalvando(true)
       if (tela === 'clientes') {
-        await salvarCliente(db, { id: idCadastro ?? undefined, nome, whatsapp: contato, endereco, aniversario, observacoes })
+        await salvarCliente(db, { id: idCadastro ?? undefined, nome, telefone: contato, endereco, aniversario, observacoes })
         const nomeSalvo = capitalizarNome(nome)
         setConfirmacao(idCadastro
           ? `Cliente ${nomeSalvo} atualizado com sucesso!`
@@ -160,9 +188,8 @@ export default function Gestao({ tela }: Props) {
     && normalizarNomeContato(nome.trim()) === nome.trim()
     && endereco.length <= 200 && normalizarTextoCadastro(endereco) === endereco
     && observacoes.length <= 200 && normalizarTextoCadastro(observacoes) === observacoes
-    && (tela === 'clientes'
-      ? digitosContato.length >= 10 && digitosContato.length <= 11 && dataNascimentoValida(aniversario)
-      : !digitosContato.length || (digitosContato.length >= 10 && digitosContato.length <= 11))
+    && digitosContato.length === 11
+    && (tela !== 'clientes' || dataNascimentoValida(aniversario))
 
   const salvarConta = async () => {
     if (salvando) return
@@ -171,7 +198,7 @@ export default function Gestao({ tela }: Props) {
       setSalvando(true)
       await salvarLancamento(db, {
         tipo, categoria, valorCents: Math.round(Number(valor || 0) * 100), data,
-        vencimento: vencimento || undefined, pago: pago === '1', negocio: true,
+        vencimento: tipo === 'despesa' ? vencimento || undefined : undefined, pago: pago === '1', negocio: true, descricao,
       })
       setConfirmacao('Lançamento financeiro salvo.')
       reset()
@@ -188,7 +215,7 @@ export default function Gestao({ tela }: Props) {
     }
   }
 
-  const avancar = async (order: EncomendaRow) => {
+  const avancar = async (order: EncomendaRow, motivoEstoqueNegativo?: string) => {
     setErro('')
     try {
       if (order.status !== 'agendado') return
@@ -197,17 +224,17 @@ export default function Gestao({ tela }: Props) {
       const saveDelivery = async (reason?: string) => entregarEncomenda(db, {
         encomendaId: order.id, forma: form, motivoEstoqueNegativo: reason,
       })
+      let saleId: string
       try {
-        await saveDelivery()
+        saleId = await saveDelivery(motivoEstoqueNegativo)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        if (!message.includes('Informe o motivo para confirmar saldo negativo')) throw error
-        const reason = window.prompt(`${message}\n\nDescreva o motivo para continuar:`)?.trim()
-        if (!reason) throw new Error('Finalização cancelada. Informe um motivo para permitir saldo negativo.')
-        await saveDelivery(reason)
+        if (!message.includes('estoque insuficiente') && !message.includes('saldo negativo')) throw error
+        setMotivoEstoque('')
+        setEstoquePendente({ pedido: order, mensagem: message })
+        return
       }
-      setConfirmacao('Pedido finalizado e venda registrada.')
-      await carregar()
+      navigate(`/venda/${saleId}`)
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
@@ -227,13 +254,28 @@ export default function Gestao({ tela }: Props) {
     }
   }
 
+  const confirmarCancelamentoPedido = async () => {
+    if (!cancelamentoPendente) return
+    const pedido = cancelamentoPendente
+    const motivo = motivoCancelamentoPedido.trim()
+    setCancelamentoPendente(null)
+    try {
+      await alterarStatusEncomenda(db, pedido.id, 'cancelado', motivo)
+      setMotivoCancelamentoPedido('')
+      await carregar()
+      setConfirmacao('Pedido cancelado.')
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   const editarCadastro = (row: ClienteRow | FornecedorRow) => {
     setFormAberto(true)
     setIdCadastro(row.id)
     setNome(row.nome)
-    setContato(formatarTelefone('whatsapp' in row ? row.whatsapp ?? '' : row.contato ?? ''))
+    setContato(formatarTelefone('telefone' in row ? row.telefone ?? '' : row.contato ?? ''))
     setObservacoes(row.observacoes ?? '')
-    if ('whatsapp' in row) {
+    if ('telefone' in row) {
       setEndereco(row.endereco ?? '')
       setAniversario(row.aniversario ?? '')
     } else {
@@ -248,7 +290,15 @@ export default function Gestao({ tela }: Props) {
     clientes: 'Clientes', fornecedores: 'Fornecedores', encomendas: 'Gestão de pedidos', financeiro: 'Financeiro',
   }
 
-  useModalAcessivel(Boolean(exclusaoPendente), () => setExclusaoPendente(null), '#gestao-confirmar-exclusao')
+  useModalAcessivel(Boolean(exclusaoPendente || motivoCancelamentoPendente || cancelamentoPendente || estoquePendente), () => {
+    setExclusaoPendente(null)
+    setMotivoCancelamentoPendente(null)
+    setMotivoCancelamentoPedido('')
+    setCancelamentoPendente(null)
+    setEstoquePendente(null)
+  }, estoquePendente ? '#gestao-estoque-motivo'
+    : motivoCancelamentoPendente ? '#gestao-motivo-cancelamento'
+    : exclusaoPendente ? '#gestao-confirmar-exclusao' : '#gestao-confirmar-cancelamento')
 
   return (
     <>
@@ -266,7 +316,7 @@ export default function Gestao({ tela }: Props) {
             <Campo rotulo="Nome completo" id={`${tela}.nome`} valor={nome} onChange={(value) => setNome(normalizarNomeContato(value))}
               limite={60} minLength={2} required />
             {tela === 'clientes' && <>
-              <Campo rotulo="WhatsApp" id="clientes.contato" tipo="tel" valor={contato}
+              <Campo rotulo="Telefone" id="clientes.contato" tipo="tel" valor={contato}
                 onChange={(value) => setContato(formatarTelefone(value))} inputMode="numeric" required />
               <Campo rotulo="Endereço" id="clientes.endereco" valor={endereco}
                 onChange={(value) => setEndereco(normalizarTextoCadastro(value))} limite={200} />
@@ -274,8 +324,8 @@ export default function Gestao({ tela }: Props) {
                 onChange={setAniversario} max={dataMaisRecenteNascimento()} />
             </>}
             {tela === 'fornecedores' && <>
-              <Campo rotulo="WhatsApp" id="fornecedores.contato" tipo="tel" valor={contato}
-                onChange={(value) => setContato(formatarTelefone(value))} inputMode="numeric" />
+              <Campo rotulo="Telefone" id="fornecedores.contato" tipo="tel" valor={contato}
+                onChange={(value) => setContato(formatarTelefone(value))} inputMode="numeric" required />
               <Campo rotulo="Endereço" id="fornecedores.endereco" valor={endereco}
                 onChange={(value) => setEndereco(normalizarTextoCadastro(value))} limite={200} />
             </>}
@@ -291,7 +341,7 @@ export default function Gestao({ tela }: Props) {
           <section className="cd">
             <h2>Cadastrados</h2>
             {tela === 'clientes' && clientes.map((client) => <div className="r contact-row" key={client.id}>
-              <span>{client.nome}<small>{client.whatsapp || client.endereco || 'Sem contato'}</small></span>
+              <span>{client.nome}<small>{client.telefone || client.endereco || 'Sem contato'}</small></span>
               <div className="contact-row-actions">
                 <button className="lk icon-action" type="button" aria-label={`Editar ${client.nome}`} title="Editar"
                   onClick={() => editarCadastro(client)}><Icon name="edit" /></button>
@@ -329,6 +379,64 @@ export default function Gestao({ tela }: Props) {
         onConfirmar={() => void confirmarExclusao()}
       />}
 
+      {cancelamentoPendente && <ConfirmacaoAcao
+        id="gestao-confirmar-cancelamento"
+        titulo="Cancelar pedido?"
+        mensagem={<>
+          Deseja realmente cancelar o pedido de {cancelamentoPendente.cliente_nome || 'cliente não informado'}?
+          <small className="cancellation-reason-preview">Motivo: {motivoCancelamentoPedido.trim()}</small>
+        </>}
+        confirmar="Sim"
+        perigosa
+        onCancelar={() => setCancelamentoPendente(null)}
+        onConfirmar={() => void confirmarCancelamentoPedido()}
+      />}
+
+      {motivoCancelamentoPendente && <div className="alert-overlay" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setMotivoCancelamentoPendente(null)
+      }}>
+        <section id="gestao-motivo-cancelamento" className="alert-dialog" role="dialog" aria-modal="true" aria-labelledby="gestao-motivo-cancelamento-titulo" tabIndex={-1}>
+          <FecharModal onClick={() => setMotivoCancelamentoPendente(null)} />
+          <span className="alert-icon danger"><Icon name="trash" size={26} /></span>
+          <h2 id="gestao-motivo-cancelamento-titulo">Motivo do cancelamento</h2>
+          <p>Informe por que o pedido de {motivoCancelamentoPendente.cliente_nome || 'cliente não informado'} será cancelado.</p>
+          <label className="fl">
+            <small>Motivo do cancelamento (obrigatório)</small>
+            <input id="gestao-motivo-cancelamento-input" autoFocus value={motivoCancelamentoPedido}
+              onChange={(event) => setMotivoCancelamentoPedido(event.target.value)} maxLength={200} />
+          </label>
+          <div className="alert-actions">
+            <button className="bt o" type="button" onClick={() => setMotivoCancelamentoPendente(null)}>Cancelar</button>
+            <button className="bt danger-button" type="button" disabled={!motivoCancelamentoPedido.trim()} onClick={() => {
+              setCancelamentoPendente(motivoCancelamentoPendente)
+              setMotivoCancelamentoPendente(null)
+            }}>Continuar</button>
+          </div>
+        </section>
+      </div>}
+
+      {estoquePendente && <div className="alert-overlay" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setEstoquePendente(null)
+      }}>
+        <section className="cd add-dialog stock-sale-dialog" role="dialog" aria-modal="true" aria-labelledby="gestao-estoque-titulo">
+          <FecharModal onClick={() => setEstoquePendente(null)} />
+          <h2 id="gestao-estoque-titulo">Estoque insuficiente</h2>
+          <p>{estoquePendente.mensagem}</p>
+          <Campo id="gestao-estoque-motivo" rotulo="Motivo para finalizar" valor={motivoEstoque}
+            onChange={setMotivoEstoque} limite={200} required
+            placeholder="Descreva por que a venda pode continuar" />
+          <div className="form-actions">
+            <button className="bt o" type="button" onClick={() => setEstoquePendente(null)}>Cancelar</button>
+            <button className="bt" type="button" disabled={!motivoEstoque.trim()} onClick={() => {
+              const pedido = estoquePendente.pedido
+              const motivo = motivoEstoque.trim()
+              setEstoquePendente(null)
+              void avancar(pedido, motivo)
+            }}>Finalizar pedido</button>
+          </div>
+        </section>
+      </div>}
+
       {tela === 'encomendas' && <>
         <section className="scheduled-dashboard" aria-labelledby="scheduled-title">
           <div className="scheduled-heading"><div><h2 id="scheduled-title">Resumo dos pedidos</h2><p className="sb">Vendas agendadas, finalizadas e canceladas</p></div></div>
@@ -338,7 +446,14 @@ export default function Gestao({ tela }: Props) {
         </section>
         <section className="cd">
           {!encomendas.length && <p className="notice">Nenhum pedido registrado. Faça uma venda agendada na tela Vendas para começar.</p>}
-          {encomendasVisiveis.map((order) => <div className="order-card" key={order.id}>
+          {!!encomendas.length && !encomendasVisiveis.length && (
+            <p className="notice">
+              {filtroAgenda === 'todos'
+                ? 'Nenhum pedido encontrado para os filtros selecionados.'
+                : `Nenhum pedido ${statusLabel[filtroAgenda as EncomendaRow['status']].toLocaleLowerCase('pt-BR')} encontrado.`}
+            </p>
+          )}
+          {encomendasVisiveis.map((order) => <div className={`order-card${pedidoDestacado === order.id ? ' order-card-new' : ''}`} id={`pedido-${order.id}`} key={order.id}>
             <div className="order-card-top"><div className="order-avatar">{(order.cliente_nome || 'S').slice(0, 1).toUpperCase()}</div><div><b>{order.cliente_nome || 'Sem cliente'}</b><small>{order.origem === 'agora' ? 'Venda agora' : `Agendada para ${formatBRDate(order.data_entrega.slice(0, 10))}`}</small></div><span className={`order-status ${order.status}`}>{statusLabel[order.status]}</span></div>
             <div className="order-summary"><span>Total <b>{formatBRL(order.total_cents)}</b></span></div>
             {order.observacoes && <small>{order.observacoes}</small>}
@@ -346,18 +461,20 @@ export default function Gestao({ tela }: Props) {
               <>
                 <Selecao rotulo="Forma de pagamento ao finalizar" id={`encomenda.pagamento.${order.id}`}
                   valor={formaEntrega[order.id] ?? ''} onChange={(value) => setFormaEntrega((current) => ({ ...current, [order.id]: value }))}
-                  opcoes={[['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao', 'Cartão']]} />
+                  opcoes={[['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao_debito', 'Cartão de débito'], ['cartao_credito', 'Cartão de crédito']]} />
                 <button className="bt" type="button" disabled={!formaEntrega[order.id]} onClick={() => void avancar(order)}>
                   Finalizar pedido
                 </button>
-                <button className="lk" type="button" onClick={async () => {
-              try { await alterarStatusEncomenda(db, order.id, 'cancelado'); await carregar(); setConfirmacao('Encomenda cancelada.') }
-              catch (error) { setErro(error instanceof Error ? error.message : String(error)) }
+                <button className="bt o" type="button" onClick={() => {
+                  setMotivoCancelamentoPedido('')
+                  setMotivoCancelamentoPendente(order)
                 }}>Cancelar pedido</button>
               </>
             )}
+            {order.status === 'finalizado' && order.venda_id && (
+              <Link className="bt" to={`/venda/${order.venda_id}`}>Ver comprovante</Link>
+            )}
           </div>)}
-          {!!encomendasAbertas.length && !encomendasVisiveis.length && <p className="notice">Nenhuma venda agendada combina com esse filtro.</p>}
         </section>
       </>}
 
@@ -365,17 +482,25 @@ export default function Gestao({ tela }: Props) {
         {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) reset() }}><section className="cd add-dialog form-dialog" id="financeiro-form" role="dialog" aria-modal="true" aria-labelledby="financeiro-form-title">
           <FecharModal onClick={reset} />
           <h2 id="financeiro-form-title">Novo lançamento</h2>
-          <Selecao rotulo="Tipo" id="financeiro.tipo" valor={tipo} onChange={(value) => setTipo(value as 'receita' | 'despesa')} opcoes={TIPOS_LANCAMENTO} />
+          <Selecao rotulo="Tipo" id="financeiro.tipo" valor={tipo}
+            onChange={(value) => {
+              setTipo(value as 'receita' | 'despesa')
+              setVencimento('')
+            }}
+            opcoes={TIPOS_LANCAMENTO} />
+          <Campo rotulo="Descrição" id="financeiro.descricao" valor={descricao} onChange={setDescricao}
+            limite={100} required placeholder="O que é este lançamento?" />
           <Selecao rotulo="Categoria" id="financeiro.categoria" valor={categoria} onChange={setCategoria}
             opcoes={categorias.map((item) => [item.nome, item.nome])} placeholder="Selecione uma categoria" />
           <Link className="lk" to="/categorias">Gerenciar categorias</Link>
           <Campo rotulo="Valor (R$)" id="financeiro.valor" valor={valor} onChange={setValor} mascara="dinheiro" />
           <div className="g">
             <SeletorData rotulo="Data" id="financeiro.data" valor={data} required onChange={setData} />
-            <SeletorData rotulo="Vencimento" id="financeiro.vencimento" valor={vencimento} onChange={setVencimento} />
+            {tipo === 'despesa' && <SeletorData rotulo="Vencimento" id="financeiro.vencimento" valor={vencimento} onChange={setVencimento} />}
           </div>
-          <Selecao rotulo="Pagamento" id="financeiro.pago" valor={pago} onChange={setPago} opcoes={STATUS_PAGAMENTO} />
-          <button className="bt" disabled={!categoria.trim() || !(Number(valor) > 0) || salvando} onClick={() => void salvarConta()}
+          <Selecao rotulo={tipo === 'receita' ? 'Recebimento' : 'Pagamento'} id="financeiro.pago" valor={pago}
+            onChange={setPago} opcoes={tipo === 'receita' ? STATUS_RECEBIMENTO : STATUS_PAGAMENTO} />
+          <button className="bt" disabled={!descricao.trim() || !categoria.trim() || !(Number(valor) > 0) || salvando} onClick={() => void salvarConta()}
             data-testid="financeiro.salvar">{salvando ? 'Salvando...' : 'Salvar lançamento'}</button>
         </section></div>}
         <section className="cd">
@@ -383,16 +508,18 @@ export default function Gestao({ tela }: Props) {
           {!lancamentos.length && <p className="notice">Ainda não há lançamentos financeiros.</p>}
           {lancamentos.map((entry) => <div className="r" key={entry.id}>
             <span className="finance-category-label">
-              <span className="finance-category-name">{entry.categoria || entry.tipo}
-                {entry.categoria && <i className="category-color-dot" style={{ backgroundColor: coresCategoria.get(entry.categoria.toLocaleLowerCase('pt-BR')) ?? '#704214' }} aria-hidden="true" />}
+              <span className="finance-category-name">{!entry.origem_tipo && entry.descricao ? entry.descricao : entry.categoria || entry.tipo}
+                {entry.categoria && (entry.categoria === 'Categoria excluída'
+                  ? <span className="category-color-dot category-color-deleted" role="img" aria-label="Categoria excluída"><Icon name="lock" size={13} /></span>
+                  : <i className="category-color-dot" style={{ backgroundColor: coresCategoria.get(entry.categoria.toLocaleLowerCase('pt-BR')) ?? '#704214' }} aria-hidden="true" />)}
               </span>
-              <small>{entry.tipo} · {formatBRDate(entry.data)} · {entry.pago ? 'Pago' : 'Pendente'}{entry.negocio ? ' · negócio' : ' · pessoal'}</small>
+              <small>{entry.tipo} · {formatBRDate(entry.data)} · {entry.pago ? (entry.tipo === 'receita' ? 'Recebido' : 'Pago') : 'Pendente'}{entry.negocio ? ' · negócio' : ' · pessoal'}</small>
             </span>
             <b>{formatBRL(entry.valor_cents)}</b>
             {!entry.pago && <button className="lk" type="button" onClick={async () => {
-              try { await marcarLancamentoPago(db, entry.id); await carregar(); setConfirmacao('Lançamento marcado como pago.') }
+              try { await marcarLancamentoPago(db, entry.id); await carregar(); setConfirmacao(entry.tipo === 'receita' ? 'Receita marcada como recebida.' : 'Despesa marcada como paga.') }
               catch (error) { setErro(error instanceof Error ? error.message : String(error)) }
-            }}>Marcar pago</button>}
+            }}>{entry.tipo === 'receita' ? 'Marcar recebido' : 'Marcar pago'}</button>}
             {!entry.origem_tipo && <button className="lk" type="button" onClick={async () => {
               try { await excluirLancamento(db, entry.id); await carregar(); setConfirmacao('Lançamento removido.') }
               catch (error) { setErro(error instanceof Error ? error.message : String(error)) }

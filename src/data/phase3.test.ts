@@ -40,7 +40,7 @@ describe('salvarFornecedor', () => {
     }
     const customer = {
       nome: 'ana souza',
-      whatsapp: '1199999999',
+      telefone: '11999999999',
       endereco: null,
       aniversario: null,
       observacoes: null,
@@ -50,27 +50,27 @@ describe('salvarFornecedor', () => {
     await salvarCliente(db, { ...customer, id: 'customer-1', nome: 'ANA SOUZA' })
 
     expect(calls[0].params[1]).toBe('Ana souza')
-    expect(calls[0].params[2]).toBe('(11) 9999-9999')
+    expect(calls[0].params[2]).toBe('(11) 99999-9999')
     expect(calls[1].params[0]).toBe('Ana souza')
   })
 
   it('rejects invalid customer phone numbers, special characters, and future birth dates', async () => {
     const db: Db = {
       query: async () => [],
-      run: async () => {},
+      run: async () => { },
       transaction: async (operation) => operation(),
     }
     const customer = {
       nome: 'Ana Souza',
-      whatsapp: '123456789',
+      telefone: '123456789',
       endereco: '',
       aniversario: '',
       observacoes: '',
     }
-    await expect(salvarCliente(db, customer)).rejects.toThrow(/10 a 11 números/)
-    await expect(salvarCliente(db, { ...customer, whatsapp: '11999999999', nome: 'Ana-Souza' })).rejects.toThrow(/caracteres especiais/)
-    await expect(salvarCliente(db, { ...customer, whatsapp: '11999999999', aniversario: '2099-01-01' })).rejects.toThrow(/anterior a hoje/)
-    await expect(salvarCliente(db, { ...customer, whatsapp: '11999999999', endereco: 'Rua A, 12' })).rejects.toThrow(/caracteres especiais/)
+    await expect(salvarCliente(db, customer)).rejects.toThrow(/11 números/)
+    await expect(salvarCliente(db, { ...customer, telefone: '11999999999', nome: 'Ana-Souza' })).rejects.toThrow(/caracteres especiais/)
+    await expect(salvarCliente(db, { ...customer, telefone: '11999999999', aniversario: '2099-01-01' })).rejects.toThrow(/anterior a hoje/)
+    await expect(salvarCliente(db, { ...customer, telefone: '11999999999', endereco: 'Rua A, 12' })).rejects.toThrow(/caracteres especiais/)
   })
 
   describe('salvarEncomenda', () => {
@@ -80,7 +80,7 @@ describe('salvarFornecedor', () => {
         query: async () => [],
         run: async (sql, params = []) => { calls.push({ sql, params }) },
         transaction: async (operation) => operation(),
-        clearData: async () => {},
+        clearData: async () => { },
       }
 
       await salvarEncomenda(db, {

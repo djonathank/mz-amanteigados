@@ -6,7 +6,11 @@ const FACTORS: Record<Unit, [BaseUnit, number]> = {
 }
 
 export const baseOf = (u: Unit): BaseUnit => FACTORS[u][0]
-export const toBase = (qty: number, u: Unit): number => qty * FACTORS[u][1]
+export const toBase = (qty: number, u: Unit): number => {
+  const factor = FACTORS[u]?.[1]
+  if (!factor) return 0
+  return qty * factor
+}
 const quantityFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 })
 export const formatQuantity = (quantity: number): string => quantityFormatter.format(quantity)
 

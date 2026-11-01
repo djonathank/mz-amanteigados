@@ -45,11 +45,10 @@ export default function Custos() {
 
   const valoresValidos = CAMPOS.every(([key, , , mascara]) => {
     const value = Number(valores[key])
-    const limite = mascara === 'percentual' ? 100 : 999.99
+    const limite = mascara === 'percentual' ? 100 : 999999
     return Number.isFinite(value) && value >= 0 && value <= limite
   })
-  const taxaCartao = Math.max(Number(valores.taxa_cartao_credito), Number(valores.taxa_cartao_debito))
-  const valido = valoresValidos && Number(valores.margem_padrao) + Math.max(Number(valores.taxa_pix), taxaCartao) < 100
+  const valido = valoresValidos
 
   const salvar = async () => {
     if (!valido || salvando) return
@@ -79,6 +78,8 @@ export default function Custos() {
             {CAMPOS.map(([key, rotulo, , mascara]) => (
               <Campo key={key} rotulo={rotulo} id={`custos.${key}`} valor={valores[key] ?? ''}
                 mascara={mascara}
+                maximo={mascara === 'percentual' ? 100 : 999999}
+                maxDigitos={mascara === 'percentual' ? 6 : 9}
                 onChange={(value) => {
                   setValores((current) => ({ ...current, [key]: value }))
                   setConfirmacao('')
@@ -89,8 +90,7 @@ export default function Custos() {
           <button className="bt" disabled={!valido || salvando} data-testid="custos.salvar" onClick={() => void salvar()}>
             {salvando ? 'Salvando...' : 'Salvar'}
           </button>
-          {!valoresValidos && <p className="notice">Percentuais devem ficar entre 0% e 100%; valores em reais, entre R$ 0,00 e R$ 999,99.</p>}
-          {valoresValidos && !valido && <p className="notice">A margem somada à maior taxa de pagamento precisa ser menor que 100%.</p>}
+          {!valoresValidos && <p className="notice">Percentuais devem ficar entre 0% e 100%; valores em reais, entre R$ 0,00 e R$ 999.999,00.</p>}
         </div>
       )}
     </>

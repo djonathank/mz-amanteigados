@@ -5,8 +5,9 @@ import { carregarBase, custoPorUnidade, type Base } from '../data/calculos'
 import { excluirProduto, salvarProduto, type VarianteRow } from '../data/repos'
 import { formatBRL } from '../domain/money'
 import { suggestedPrice } from '../domain/pricing'
+import { filtrarNumeroSemMascara } from '../domain/inputMask'
 import { ajustarEstoque } from '../data/phase2'
-import { AlertaConclusao, Campo, FecharModal, focarCampo, Icon, Selecao } from './ui'
+import { AlertaConclusao, Campo, ConfirmacaoAcao, FecharModal, focarCampo, Icon, Selecao, useModalAcessivel } from './ui'
 
 interface Linha {
   id?: string
@@ -48,6 +49,10 @@ export default function Produtos() {
   const [formAberto, setFormAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [acoesEstoqueAbertas, setAcoesEstoqueAbertas] = useState<string | null>(null)
+  const [produtoPendente, setProdutoPendente] = useState<{ id: string; nome: string } | null>(null)
+  const [movimentoPendente, setMovimentoPendente] = useState<{ variante: VarianteRow; perda: boolean } | null>(null)
+  const [quantidadeMovimento, setQuantidadeMovimento] = useState('')
+  const [motivoMovimento, setMotivoMovimento] = useState('')
 
   const carregar = useCallback(async () => {
     const b = await carregarBase(db)
@@ -57,6 +62,8 @@ export default function Produtos() {
     void carregar().catch((e) => setErro(e instanceof Error ? e.message : String(e)))
   }, [carregar])
   useEffect(() => { if (location.hash === '#produto-form') setFormAberto(true) }, [location.hash])
+  useModalAcessivel(Boolean(produtoPendente), () => setProdutoPendente(null), '#produto-confirmar-exclusao')
+  useModalAcessivel(Boolean(movimentoPendente), () => setMovimentoPendente(null), '#produto-movimento-dialog')
   if (!base) return erro
     ? <p className="notice error" role="alert">{erro}</p>
     : <p className="notice" role="status">Carregando produtos...</p>
@@ -135,7 +142,7 @@ export default function Produtos() {
       : receita?.rendimento_unidade === 'ml'
         ? Number(volume) > 0
         : true)
-    if (!vn.trim() || !medidaValida || !(Number(preco) > 0)) return
+    if (!vn.trim() || vn.trim().length > 200 || !medidaValida || !(Number(preco) > 0)) return
     const pesoNumero = Number(peso)
     const volumeNumero = Number(volume)
     const variante: Linha = {
@@ -208,31 +215,84 @@ export default function Produtos() {
     : receita?.rendimento_unidade === 'ml'
       ? Number(volume) > 0
       : true)
-  const ajustarVariante = async (variant: VarianteRow, perda = false) => {
+  const abrirMovimento = (variant: VarianteRow, perda = false) => {
     setAcoesEstoqueAbertas(null)
-    const value = window.prompt(`Saldo atual: ${variant.estoque_atual} pacote(s). Informe a quantidade ${perda ? 'perdida' : 'do ajuste'}:`)
-    if (value === null) return
-    const amount = Number(value.replace(',', '.'))
+    setMovimentoPendente({ variante: variant, perda })
+    setQuantidadeMovimento('')
+    setMotivoMovimento('')
+    setErro('')
+  }
+
+  const fecharMovimento = () => {
+    setMovimentoPendente(null)
+    setQuantidadeMovimento('')
+    setMotivoMovimento('')
+  }
+
+  const ajustarVariante = async () => {
+    if (!movimentoPendente) return
+    const { variante, perda } = movimentoPendente
+    if (Number(variante.estoque_atual ?? 0) < 0) {
+      setErro('O saldo atual deve ser ajustado para zero antes de registrar movimentações.')
+      return
+    }
+    const amount = Number(quantidadeMovimento.replace(',', '.'))
     if (!Number.isFinite(amount) || amount <= 0) {
       setErro('Informe uma quantidade maior que zero.')
       return
     }
+    if (!Number.isInteger(amount) || amount > 999999) {
+      setErro('Informe uma quantidade inteira de até 999999.')
+      return
+    }
+    if (perda && amount > Number(variante.estoque_atual ?? 0)) {
+      setErro('A perda não pode ser maior que o saldo atual.')
+      return
+    }
     const quantity = perda ? -amount : amount
-    const reason = window.prompt(perda ? 'Informe o motivo da perda:' : 'Informe o motivo do ajuste:')?.trim() ?? ''
+    const reason = motivoMovimento.trim()
     if (!reason) {
       setErro('Informe o motivo da movimentação.')
       return
     }
     try {
       await ajustarEstoque(db, {
-        tipo: 'variante', id: variant.id, quantidade: quantity, motivo: reason,
+        tipo: 'variante', id: variante.id, quantidade: quantity, motivo: reason,
         operacao: perda ? 'perda' : 'ajuste',
       })
+      fecharMovimento()
       await carregar()
       setErro('')
       setConfirmacao(perda ? 'Perda registrada.' : 'Estoque atualizado.')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const quantidadeMovimentoNumero = Number(quantidadeMovimento.replace(',', '.'))
+  const quantidadeMovimentoValida = quantidadeMovimento.trim()
+    && Number.isFinite(quantidadeMovimentoNumero)
+    && Number.isInteger(quantidadeMovimentoNumero)
+    && quantidadeMovimentoNumero > 0
+    && quantidadeMovimentoNumero <= 999999
+  const saldoAtualMovimento = Number(movimentoPendente?.variante.estoque_atual ?? 0)
+  const saldoProjetadoMovimento = movimentoPendente
+    ? saldoAtualMovimento + (movimentoPendente.perda ? -quantidadeMovimentoNumero : quantidadeMovimentoNumero)
+    : Number.NaN
+  const perdaValida = !movimentoPendente?.perda || quantidadeMovimentoNumero <= saldoAtualMovimento
+
+  const excluir = async () => {
+    if (!produtoPendente) return
+    const selecionado = produtoPendente
+    setProdutoPendente(null)
+    try {
+      await excluirProduto(db, selecionado.id)
+      await carregar()
+      if (editando === selecionado.id) limpar()
+      setErro('')
+      setConfirmacao('Produto excluído.')
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -247,26 +307,14 @@ export default function Produtos() {
         {produtos.map((produto) => (
           <div className="product-row" key={produto.id}>
             <span className="ic" aria-hidden="true"><Icon name="box" /></span>
-            <div className="product-row-content"><b>{produto.nome}</b>{produto.variantes.map((variant) => (
+            <div className="product-row-content"><b className="product-name" title={produto.nome}>{produto.nome}</b>{produto.variantes.map((variant) => (
               <div className="variant-stock" key={variant.id}>
                 <small>{variant.nome} · {formatBRL(variant.preco_cents)} · saldo {variant.estoque_atual ?? 0}</small>
               </div>
             ))}</div>
             <div className="product-row-actions">
             <button className="lk icon-action" aria-label={`Editar ${produto.nome}`} onClick={() => editar(produto)}><Icon name="edit" /></button>
-            <button className="lk icon-action" aria-label={`Excluir ${produto.nome}`} onClick={async () => {
-              if (confirm(`Excluir "${produto.nome}" e suas variantes?`)) {
-                try {
-                  await excluirProduto(db, produto.id)
-                  await carregar()
-                  if (editando === produto.id) limpar()
-                  setErro('')
-                  setConfirmacao('Produto excluído.')
-                } catch (e) {
-                  setErro(e instanceof Error ? e.message : String(e))
-                }
-              }
-            }}><Icon name="trash" /></button>
+            <button className="lk icon-action" aria-label={`Excluir ${produto.nome}`} onClick={() => setProdutoPendente({ id: produto.id, nome: produto.nome })}><Icon name="trash" /></button>
             <button className="lk icon-action product-stock-toggle" type="button" aria-label={`Mais ações de estoque para ${produto.nome}`} title="Ações de estoque"
               aria-expanded={acoesEstoqueAbertas === produto.id}
               onClick={() => setAcoesEstoqueAbertas((aberta) => aberta === produto.id ? null : produto.id)}>
@@ -275,12 +323,11 @@ export default function Produtos() {
             </div>
             {acoesEstoqueAbertas === produto.id && <div className="stock-extra-actions product-stock-extra-actions">
               {produto.variantes.map((variant) => <div className="product-stock-action-group" key={variant.id}>
-                <small>{variant.nome} · saldo {variant.estoque_atual ?? 0}</small>
-                <button className="stock-extra-action" type="button" aria-label={`Ajustar estoque de ${variant.nome}`} onClick={() => void ajustarVariante(variant)}>
+                <button className="stock-extra-action" type="button" aria-label={`Ajustar estoque de ${variant.nome}`} onClick={() => abrirMovimento(variant)}>
                   <span className="stock-extra-action-icon"><Icon name="stock" /></span>
                   <span><b>Ajustar</b><small>Adicionar quantidade ao saldo</small></span>
                 </button>
-                <button className="stock-extra-action" type="button" aria-label={`Registrar perda de ${variant.nome}`} onClick={() => void ajustarVariante(variant, true)}>
+                <button className="stock-extra-action" type="button" aria-label={`Registrar perda de ${variant.nome}`} onClick={() => abrirMovimento(variant, true)}>
                   <span className="stock-extra-action-icon"><Icon name="trash" /></span>
                   <span><b>Registrar perda</b><small>Descontar quantidade perdida</small></span>
                 </button>
@@ -290,11 +337,56 @@ export default function Produtos() {
         ))}
       </div>
       <AlertaConclusao mensagem={confirmacao} onConcluir={() => setConfirmacao('')} />
+      {produtoPendente && <ConfirmacaoAcao
+        id="produto-confirmar-exclusao"
+        titulo="Excluir produto?"
+        mensagem={`Tem certeza que deseja excluir o produto ${produtoPendente.nome} e suas variantes?`}
+        confirmar="Excluir"
+        perigosa
+        onCancelar={() => setProdutoPendente(null)}
+        onConfirmar={() => void excluir()}
+      />}
+      {movimentoPendente && <div className="alert-overlay" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) fecharMovimento()
+      }}>
+        <section id="produto-movimento-dialog" className="alert-dialog stock-modal" role="dialog" aria-modal="true" aria-labelledby="produto-movimento-title" tabIndex={-1}>
+          <FecharModal onClick={fecharMovimento} />
+          <span className="alert-icon"><Icon name={movimentoPendente.perda ? 'trash' : 'stock'} size={26} /></span>
+          <h2 id="produto-movimento-title">{movimentoPendente.perda ? 'Registrar perda' : 'Adicionar quantidade'}</h2>
+          <p><b>{movimentoPendente.variante.nome}</b><br />Saldo atual: {movimentoPendente.variante.estoque_atual ?? 0} pacote(s)</p>
+          <label className="stock-modal-field">
+            <span>Quantidade</span>
+            <input autoFocus type="text" inputMode="numeric" value={quantidadeMovimento} maxLength={6} onChange={(event) => {
+              setQuantidadeMovimento(filtrarNumeroSemMascara(event.target.value, false, 6))
+              setErro('')
+            }} />
+          </label>
+          <label className="stock-modal-field">
+            <span>Motivo</span>
+            <input type="text" value={motivoMovimento} maxLength={100} onChange={(event) => setMotivoMovimento(event.target.value)} placeholder={movimentoPendente.perda ? 'Ex.: produto vencido' : 'Ex.: reposição de estoque'} />
+          </label>
+          <p id="produto-saldo-previsto" className={`stock-balance-preview${perdaValida ? '' : ' error'}`}>
+            Saldo atual: <b>{saldoAtualMovimento}</b>{quantidadeMovimentoValida ? <>
+              {' '}{movimentoPendente.perda ? '-' : '+'}{' '}<b>{quantidadeMovimentoNumero}</b>{' = '}<b>{saldoProjetadoMovimento}</b> pacote(s)
+            </> : ' pacote(s)'}
+          </p>
+          {saldoAtualMovimento < 0 && <p className="notice error" role="alert">O saldo atual deve ser zero antes de adicionar ou registrar perda.</p>}
+          {saldoAtualMovimento >= 0 && movimentoPendente.perda && quantidadeMovimentoValida && !perdaValida &&
+            <p className="notice error" role="alert">A perda não pode deixar o saldo menor que zero.</p>}
+          {erro && <p className="notice error" role="alert">{erro}</p>}
+          <div className="alert-actions">
+            <button className="bt o" type="button" onClick={fecharMovimento}>Cancelar</button>
+            <button className="bt" type="button" disabled={saldoAtualMovimento < 0 || !quantidadeMovimentoValida || !motivoMovimento.trim() || !perdaValida} onClick={() => void ajustarVariante()}>
+              {movimentoPendente.perda ? 'Registrar perda' : 'Adicionar'}
+            </button>
+          </div>
+        </section>
+      </div>}
       {formAberto && <div className="alert-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) limpar() }}><section className="add-dialog form-dialog" id="produto-form" role="dialog" aria-modal="true" aria-labelledby="produto-form-title">
         <FecharModal onClick={limpar} />
         <h2 id="produto-form-title">{editando ? 'Editar produto' : 'Novo produto'}</h2>
         {erro && <p className="notice error" role="alert">{erro}</p>}
-        <Campo rotulo="Nome do produto" id="produto.nome" valor={nome} onChange={setNome} placeholder="Ex.: bolacha amanteigada" />
+        <Campo rotulo="Nome do produto" id="produto.nome" valor={nome} onChange={setNome} placeholder="Ex.: Amanteigado de chocolate 100g" limite={200} minLength={1} required />
         {base.receitas.length === 0
           ? <p className="notice">Cadastre uma receita na aba Receitas antes de criar produtos.</p>
           : <Selecao rotulo="Receita" id="produto.receita" valor={rec} onChange={(id) => {
@@ -311,7 +403,7 @@ export default function Produtos() {
             }
             setUn('1')
             setRec(id)
-          }} opcoes={base.receitas.map((r) => [r.id, `${r.nome} · ${r.rendimento_qtd} ${r.rendimento_unidade}`])} />}
+          }} opcoes={base.receitas.map((r) => [r.id, `${r.nome} · ${r.rendimento_qtd} ${r.rendimento_unidade}`])} required />}
         {orientacao && <p className="notice" role="status">{orientacao}</p>}
         {linhas.map((linha, index) => (
           <div className="r" key={linha.id ?? `novo-${index}`}>
@@ -332,7 +424,7 @@ export default function Produtos() {
             </div>
           </div>
         ))}
-        <Campo rotulo="Nome da embalagem / variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote 150 g" />
+        <Campo rotulo="Nome da embalagem / variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote com 10 unidades" limite={200} minLength={1} required />
         <div className="g">
           {receita?.rendimento_unidade === 'g' && <Campo rotulo="Peso da receita no pacote (g)" id="produto.peso" valor={peso} onChange={setPeso} mascara="quantidade" />}
           {receita?.rendimento_unidade === 'ml' && <Campo rotulo="Volume da receita no pacote (ml)" id="produto.volume" valor={volume} onChange={setVolume} mascara="quantidade" />}
@@ -345,13 +437,13 @@ export default function Produtos() {
         {custoTotalPacote > 0 && <p className="cost-hint">Custo estimado: {formatBRL(custoTotalPacote)} · preço sugerido: {formatBRL(sugerido)}</p>}
         {sugerido > 0 && <button className="bt o" type="button" onClick={() => setPreco((sugerido / 100).toFixed(2))} data-testid="produto.usar-sugerido">Usar preço sugerido</button>}
         <button className="bt o" type="button" onClick={adicionar}
-          disabled={!vn.trim() || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
+          disabled={!vn.trim() || vn.trim().length > 200 || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
           {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
         </button>
-        <button className="bt" disabled={!nome.trim() || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
+        <button className="bt" disabled={!nome.trim() || nome.trim().length > 200 || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
           {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
         </button>
-        {editando && <button className="bt o" onClick={limpar}>Cancelar edição</button>}
+        {editando && <button className="bt o" onClick={limpar}>Cancelar</button>}
       </section></div>}
     </>
   )

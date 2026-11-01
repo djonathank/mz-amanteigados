@@ -121,7 +121,10 @@ export async function salvarInsumo(
   db: Db,
   i: { id?: string; nome: string; unidade: Unit; quantidade?: number; totalCents?: number; tipo?: string; estoqueMinimo?: number },
 ) {
-  if (!i.nome.trim()) throw new Error('Informe um nome válido.')
+  const nomeInformado = i.nome.trim()
+  if (nomeInformado.length < 2 || nomeInformado.length > 60) {
+    throw new Error('O nome completo deve conter entre 2 e 60 caracteres.')
+  }
   if (i.estoqueMinimo !== undefined && (!Number.isFinite(i.estoqueMinimo) || i.estoqueMinimo < 0)) {
     throw new Error('O estoque mínimo precisa ser zero ou maior.')
   }
@@ -354,12 +357,12 @@ export const salvarConfig = (db: Db, c: Record<string, string>) => {
   const updatedAt = agora()
   if (c.gas_lote !== undefined) {
     const gas = Number(c.gas_lote)
-    if (!(Number.isFinite(gas) && gas >= 0 && gas <= 999.99)) throw new Error('O custo de gás precisa ficar entre R$ 0,00 e R$ 999,99.')
+    if (!(Number.isFinite(gas) && gas >= 0 && gas <= 999999)) throw new Error('O custo de gás precisa ficar entre R$ 0,00 e R$ 999.999,00.')
     config.gas_lote_cents = String(Math.round(gas * 100))
   }
   if (c.hora_trabalho !== undefined) {
     const hora = Number(c.hora_trabalho)
-    if (!(Number.isFinite(hora) && hora >= 0 && hora <= 999.99)) throw new Error('O valor da hora precisa ficar entre R$ 0,00 e R$ 999,99.')
+    if (!(Number.isFinite(hora) && hora >= 0 && hora <= 999999)) throw new Error('O valor da hora precisa ficar entre R$ 0,00 e R$ 999.999,00.')
     config.valor_hora_cents = String(Math.round(hora * 100))
   }
   for (const key of ['taxa_pix', 'taxa_cartao', 'taxa_cartao_credito', 'taxa_cartao_debito', 'margem_padrao']) {
@@ -868,6 +871,9 @@ export async function salvarProduto(
   },
 ) {
   if (!p.nome.trim() || !p.receitaId || !p.variantes.length) throw new Error('Informe produto, receita e ao menos uma variante')
+  if (p.nome.trim().length > 200 || p.variantes.some((v) => v.nome.trim().length > 200)) {
+    throw new Error('O nome do produto e da variante devem ter até 200 caracteres.')
+  }
   if (p.variantes.some((v) => !v.nome.trim() || !(v.unidades > 0) || !(v.precoCents > 0)
     || (v.pesoG != null && !(v.pesoG > 0)) || (v.volumeMl != null && !(v.volumeMl > 0)))) {
     throw new Error('Confira nome, rendimento, peso e preço das variantes')
@@ -993,7 +999,7 @@ export async function registrarVenda(
       if (!variant) throw new Error('Uma variante desta venda não foi encontrada.')
       const stock = Number(variant.estoque_atual ?? 0)
       if (i.quantidade > stock && !reason) {
-        throw new Error(`Estoque insuficiente para uma variante da venda (${stock} disponível). Informe o motivo para confirmar saldo negativo.`)
+        throw new Error(`Pedido com estoque insuficiente para uma variante da venda. Informe o motivo para confirmar venda com estoque insuficiente.`)
       }
       await db.run(
         `INSERT INTO venda_item (id, venda_id, variante_id, lote_id, quantidade, preco_unit_cents, custo_unit_cents, created_at, updated_at)

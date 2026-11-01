@@ -13,7 +13,7 @@ CREATE TABLE fornecedor (
 );
 CREATE TABLE cliente (
   id TEXT PRIMARY KEY,
-  nome TEXT NOT NULL, whatsapp TEXT, endereco TEXT, aniversario TEXT, observacoes TEXT, tipo_preco_id TEXT,
+  nome TEXT NOT NULL, telefone TEXT, endereco TEXT, aniversario TEXT, observacoes TEXT, tipo_preco_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, device_id TEXT
 );
 CREATE TABLE receita (

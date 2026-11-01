@@ -30,6 +30,27 @@ function baixar(nome: string, conteudo: BlobPart, tipo: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+async function carregarLogoPdf() {
+  const imagem = new Image()
+  imagem.src = `${import.meta.env.BASE_URL}assets/logoapp.jpeg`
+  await imagem.decode()
+  const canvas = document.createElement('canvas')
+  const largura = 96
+  canvas.width = largura
+  canvas.height = largura
+  const contexto = canvas.getContext('2d', { willReadFrequently: true })
+  if (!contexto) return undefined
+  contexto.drawImage(imagem, 0, 0, largura, largura)
+  const { data } = contexto.getImageData(0, 0, largura, largura)
+  let pixelsHex = ''
+  for (let index = 0; index < data.length; index += 4) {
+    pixelsHex += data[index].toString(16).padStart(2, '0')
+    pixelsHex += data[index + 1].toString(16).padStart(2, '0')
+    pixelsHex += data[index + 2].toString(16).padStart(2, '0')
+  }
+  return { largura, altura: largura, pixelsHex }
+}
+
 export default function Relatorios() {
   const db = useDb()
   const [inicio, setInicio] = useState(primeiroDiaDoMes())
@@ -124,7 +145,10 @@ export default function Relatorios() {
   const exportarCsv = () => {
     setExportando('csv')
     try {
-      baixar(`mz-relatorios-${inicio}-${fim}.csv`, gerarCsv(tabelas), 'text/csv;charset=utf-8')
+      baixar(`mz-relatorios-${inicio}-${fim}.csv`, gerarCsv(tabelas, {
+        titulo: 'MZ Gestão',
+        periodo: `${formatBRDate(inicio)} a ${formatBRDate(fim)}`,
+      }), 'text/csv;charset=utf-8')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     } finally {
@@ -132,24 +156,39 @@ export default function Relatorios() {
     }
   }
 
-  const exportarPdf = () => {
+  const exportarPdf = async () => {
     setExportando('pdf')
     try {
-      const lines = [
-        `Relatórios MZ Gestão · ${inicio} a ${fim}`,
-        ...(resumo ? [
-          `Vendas: ${resumo.vendas}`, `Faturamento: ${formatBRL(resumo.total_cents)}`,
-          `Recebido: ${formatBRL(resumo.pagas_cents)}`, `A receber: ${formatBRL(resumo.pendentes_cents)}`,
-          `Lucro estimado: ${formatBRL(resumo.lucro_cents)}`,
-        ] : ['Gere o relatório para visualizar resultados.']),
-        '', 'Lucro por produto',
-        ...produtos.map((row) => `${row.nome}: ${row.unidades} unidades · ${formatBRL(row.faturamento_cents)} · lucro ${formatBRL(row.lucro_cents)}`),
-        '', 'Melhores clientes',
-        ...clientes.map((row) => `${row.nome}: ${row.vendas} vendas · ${formatBRL(row.faturamento_cents)}`),
-        '', 'Histórico de custo de insumos',
-        ...custos.map((row) => `${row.insumo} · ${formatBRDate(row.data)} · ${formatBRL(row.custo_por_base)} por ${row.unidade}`),
-      ]
-      const pdf = criarPdf(lines.join('\n'))
+      const logo = await carregarLogoPdf()
+      const pdf = criarPdf({
+        inicio: formatBRDate(inicio),
+        fim: formatBRDate(fim),
+        logo,
+        resumo: resumo ? [
+          { label: 'Vendas', valor: String(resumo.vendas) },
+          { label: 'Faturamento', valor: formatBRL(resumo.total_cents) },
+          { label: 'Recebido', valor: formatBRL(resumo.pagas_cents) },
+          { label: 'A receber', valor: formatBRL(resumo.pendentes_cents) },
+          { label: 'Lucro estimado', valor: formatBRL(resumo.lucro_cents) },
+        ] : [],
+        secoes: [
+          {
+            titulo: 'Lucro por produto',
+            colunas: ['Produto', 'Unidades', 'Faturamento', 'Lucro estimado'],
+            linhas: produtos.map((row) => [row.nome, String(row.unidades), formatBRL(row.faturamento_cents), formatBRL(row.lucro_cents)]),
+          },
+          {
+            titulo: 'Melhores clientes',
+            colunas: ['Cliente', 'Vendas', 'Faturamento'],
+            linhas: clientes.map((row) => [row.nome, String(row.vendas), formatBRL(row.faturamento_cents)]),
+          },
+          {
+            titulo: 'Historico de custo de insumos',
+            colunas: ['Insumo', 'Data', 'Custo por unidade-base', 'Unidade'],
+            linhas: custos.map((row) => [row.insumo, formatBRDate(row.data), formatBRL(row.custo_por_base), row.unidade]),
+          },
+        ],
+      })
       baixar(`mz-relatorios-${inicio}-${fim}.pdf`, new Uint8Array(pdf), 'application/pdf')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
@@ -166,8 +205,11 @@ export default function Relatorios() {
       {erro && <p className="notice error" role="alert">{erro}</p>}
       <section className="cd">
         <div className="g">
-          <SeletorData rotulo="De" id="relatorio.inicio" valor={inicio} onChange={setInicio} />
-          <SeletorData rotulo="Até" id="relatorio.fim" valor={fim} onChange={setFim} />
+          <SeletorData rotulo="De" id="relatorio.inicio" valor={inicio} max={hoje()} onChange={(valor) => {
+            setInicio(valor)
+            if (fim && fim < valor) setFim(valor)
+          }} />
+          <SeletorData rotulo="Até" id="relatorio.fim" valor={fim} min={inicio} max={hoje()} onChange={setFim} />
         </div>
         <button className="bt" disabled={carregando} onClick={() => void consultar()} data-testid="relatorio.consultar">
           {carregando ? 'Consultando...' : 'Gerar relatório'}
@@ -179,23 +221,32 @@ export default function Relatorios() {
             <div className="cd metric"><small>Lucro estimado</small><b>{formatBRL(resumo.lucro_cents)}</b><span>nas vendas</span></div>
             <div className="cd metric"><small>A receber</small><b>{formatBRL(resumo.pendentes_cents)}</b><span>pendente</span></div>
           </div>
-          <div className="r"><button className="bt o" disabled={Boolean(exportando)} onClick={exportarCsv}>Exportar CSV</button>
-            <button className="bt o" disabled={Boolean(exportando)} onClick={exportarPdf}>Exportar PDF</button></div>
+          <div className="r report-export-actions">
+            <button className="bt o" disabled={Boolean(exportando)} onClick={exportarPdf}>Exportar PDF</button>
+          </div>
         </>}
       </section>
       {resumo && <>
-        <section className="cd"><h2>Lucro por produto</h2>
-          {produtos.map((row) => <div className="r" key={row.nome}><span>{row.nome}<small>{row.unidades} unidades · vendas {formatBRL(row.faturamento_cents)}</small></span><b>{formatBRL(row.lucro_cents)}</b></div>)}
+        {!produtos.length && !clientes.length && !custos.length && resumo.vendas === 0 &&
+          <p className="notice report-period-empty" role="status">Não há registros neste período.</p>}
+        <section className="cd report-results-section"><h2>Lucro por produto</h2>
+          {produtos.map((row) => <div className="r report-row" key={row.nome}>
+            <span className="report-row-main" title={row.nome}><span className="report-row-name">{row.nome}</span><small>{row.unidades} unidades · vendas {formatBRL(row.faturamento_cents)}</small></span>
+            <b className="report-row-value">{formatBRL(row.lucro_cents)}</b>
+          </div>)}
           {!produtos.length && <p className="notice">Não há vendas neste período.</p>}
         </section>
         <section className="cd"><h2>Melhores clientes</h2>
-          {clientes.map((row) => <div className="r" key={row.nome}><span>{row.nome}<small>{row.vendas} vendas</small></span><b>{formatBRL(row.faturamento_cents)}</b></div>)}
+          {clientes.map((row) => <div className="r report-row" key={row.nome}>
+            <span className="report-row-main" title={row.nome}><span className="report-row-name">{row.nome}</span><small>{row.vendas} vendas</small></span>
+            <b className="report-row-value">{formatBRL(row.faturamento_cents)}</b>
+          </div>)}
           {!clientes.length && <p className="notice">Não há melhores clientes neste período</p>}
         </section>
         <section className="cd"><h2>Custo dos insumos</h2>
-          {custos.map((row, index) => <div className="r" key={`${row.insumo}-${row.data}-${index}`}>
-            <span>{row.insumo}<small>{formatBRDate(row.data)} · por {row.unidade}</small></span>
-            <b>{formatBRL(row.custo_por_base)}</b>
+          {custos.map((row, index) => <div className="r report-row" key={`${row.insumo}-${row.data}-${index}`}>
+            <span className="report-row-main" title={row.insumo}><span className="report-row-name">{row.insumo}</span><small>{formatBRDate(row.data)} · por {row.unidade}</small></span>
+            <b className="report-row-value">{formatBRL(row.custo_por_base)}</b>
           </div>)}
           {!custos.length && <p className="notice">Sem alterações de custo registradas.</p>}
         </section>

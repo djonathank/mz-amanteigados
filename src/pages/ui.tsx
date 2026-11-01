@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatarNumeroMascarado, limitarDigitos, normalizarDinheiroInterativo, normalizarNumeroDigitado, type NumericMask } from '../domain/inputMask'
 
-type CampoProps = { rotulo: string; id: string; valor: string | number; onChange: (v: string) => void; tipo?: string; passo?: string; limite?: number; maxDigitos?: number; min?: string | number; minLength?: number; required?: boolean; disabled?: boolean; readOnly?: boolean; inputMode?: 'numeric' | 'decimal' }
+type CampoProps = { rotulo: string; id: string; valor: string | number; onChange: (v: string) => void; tipo?: string; passo?: string; limite?: number; maxDigitos?: number; minimo?: number; maximo?: number; min?: string | number; minLength?: number; required?: boolean; disabled?: boolean; readOnly?: boolean; inputMode?: 'numeric' | 'decimal' }
 
 const ICONOS = {
   home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-6h6v6" /></>,
@@ -25,6 +25,7 @@ const ICONOS = {
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01M16 17h.01" /></>,
   arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   check: <><path d="m5 12 4 4L19 6" /></>,
+  lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></>,
   close: <><path d="m6 6 12 12M18 6 6 18" /></>,
 } as const
 
@@ -131,10 +132,10 @@ const dataLocalFromIso = (valor: string) => {
 }
 
 export function SeletorData({
-  rotulo, id, valor, onChange, min, max, required, permitirValor, disabled,
+  rotulo, id, valor, onChange, min, max, required, permitirValor, disabled, placeholder = 'Selecione',
 }: {
   rotulo: string; id: string; valor: string; onChange: (valor: string) => void
-  min?: string; max?: string; required?: boolean; permitirValor?: string; disabled?: boolean
+  min?: string; max?: string; required?: boolean; permitirValor?: string; disabled?: boolean; placeholder?: string
 }) {
   const [aberto, setAberto] = useState(false)
   const [mesExibido, setMesExibido] = useState(() => {
@@ -158,6 +159,15 @@ export function SeletorData({
       : null
   })
   const tituloMes = mesExibido.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const anoInicial = min ? Number(min.slice(0, 4)) : 1900
+  const anoAtual = new Date().getFullYear()
+  const anoFinal = max ? Number(max.slice(0, 4)) : Math.max(anoAtual + 20, mesExibido.getFullYear() + 20)
+  const anos = Array.from({ length: Math.max(0, anoFinal - anoInicial + 1) }, (_, index) => anoInicial + index)
+  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+  const mesAnterior = new Date(mesExibido.getFullYear(), mesExibido.getMonth() - 1, 1)
+  const proximoMes = new Date(mesExibido.getFullYear(), mesExibido.getMonth() + 1, 1)
+  const mesAnteriorDisponivel = !min || dataIsoLocal(new Date(mesAnterior.getFullYear(), mesAnterior.getMonth() + 1, 0)) >= min
+  const proximoMesDisponivel = !max || dataIsoLocal(proximoMes) <= max
 
   return <>
     <label className="fl">
@@ -173,11 +183,12 @@ export function SeletorData({
         data-testid={id}
         onClick={() => {
           const data = dataLocalFromIso(valor)
-          setMesExibido(new Date(data.getFullYear(), data.getMonth(), 1))
+          const ano = Math.max(anoInicial, Math.min(anoFinal, data.getFullYear()))
+          setMesExibido(new Date(ano, data.getMonth(), 1))
           setAberto(true)
         }}
       >
-        <span>{valor ? selecionada?.toLocaleDateString('pt-BR') : 'Selecione'}</span>
+        <span className={valor ? undefined : 'date-picker-placeholder'}>{valor ? selecionada?.toLocaleDateString('pt-BR') : placeholder}</span>
         <Icon name="calendar" />
       </button>
     </label>
@@ -199,11 +210,28 @@ export function SeletorData({
             weekday: 'long', day: 'numeric', month: 'long',
           }) : 'Escolha uma data'}</h2>
         </div>
-        <div className="date-picker-month">
+        <div className="date-picker-navigation">
           <button type="button" className="date-picker-nav" aria-label="Mês anterior"
+            disabled={!mesAnteriorDisponivel}
             onClick={() => setMesExibido(new Date(mesExibido.getFullYear(), mesExibido.getMonth() - 1, 1))}>‹</button>
-          <b>{tituloMes}</b>
+          <div className="date-picker-selectors">
+            <label>
+              <span>Mês</span>
+              <select aria-label="Mês do calendário" value={mesExibido.getMonth()}
+                onChange={(event) => setMesExibido(new Date(mesExibido.getFullYear(), Number(event.target.value), 1))}>
+                {meses.map((mes, index) => <option value={index} key={mes}>{mes}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Ano</span>
+              <select aria-label="Ano do calendário" value={mesExibido.getFullYear()}
+                onChange={(event) => setMesExibido(new Date(Number(event.target.value), mesExibido.getMonth(), 1))}>
+                {anos.map((ano) => <option value={ano} key={ano}>{ano}</option>)}
+              </select>
+            </label>
+          </div>
           <button type="button" className="date-picker-nav" aria-label="Próximo mês"
+            disabled={!proximoMesDisponivel}
             onClick={() => setMesExibido(new Date(mesExibido.getFullYear(), mesExibido.getMonth() + 1, 1))}>›</button>
         </div>
         <div className="date-picker-grid" role="grid" aria-label={tituloMes}>
@@ -249,7 +277,7 @@ export function AlertaConclusao({ mensagem, onConcluir }: { mensagem: string; on
 export function ConfirmacaoAcao({
   titulo = 'Confirmar ação', mensagem, confirmar = 'Confirmar', perigosa = false, onCancelar, onConfirmar, id,
 }: {
-  titulo?: string; mensagem: string; confirmar?: string; perigosa?: boolean; onCancelar: () => void; onConfirmar: () => void; id?: string
+  titulo?: string; mensagem: ReactNode; confirmar?: string; perigosa?: boolean; onCancelar: () => void; onConfirmar: () => void; id?: string
 }) {
   return (
     <div className="alert-overlay">
@@ -259,7 +287,7 @@ export function ConfirmacaoAcao({
         <h2 id="confirm-title">{titulo}</h2>
         <p id="confirm-message">{mensagem}</p>
         <div className="alert-actions">
-          <button className="bt o" type="button" onClick={onCancelar}>Cancelar</button>
+          <button className="bt o" type="button" onClick={onCancelar}>Não</button>
           <button className={`bt${perigosa ? ' danger-button' : ''}`} type="button" autoFocus onClick={onConfirmar}>{confirmar}</button>
         </div>
       </section>
@@ -269,9 +297,11 @@ export function ConfirmacaoAcao({
 
 type CampoComMascaraProps = CampoProps & { mascara?: NumericMask; placeholder?: string }
 
-export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limite, maxDigitos, min, minLength, required, disabled, readOnly, inputMode, mascara, placeholder }: CampoComMascaraProps) => {
+export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limite, maxDigitos, minimo = 0, maximo, min, minLength, required, disabled, readOnly, inputMode, mascara, placeholder }: CampoComMascaraProps) => {
   const [focado, setFocado] = useState(false)
   const [rascunho, setRascunho] = useState<string | null>(null)
+  const maximoEfetivo = maximo ?? (mascara === 'dinheiro' ? 999999 : undefined)
+  const maxDigitosEfetivo = maxDigitos ?? (mascara === 'dinheiro' ? 8 : undefined)
   const valorTexto = String(valor)
   const valorAtual = focado && rascunho !== null ? rascunho : valorTexto
   const exibido = mascara ? formatarNumeroMascarado(valorAtual, mascara, focado) : valorTexto
@@ -288,12 +318,15 @@ export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limit
       onChange(input.value)
       return
     }
-    const textoDigitado = maxDigitos === undefined ? input.value : limitarDigitos(input.value, maxDigitos)
+    const textoDigitado = maxDigitosEfetivo === undefined ? input.value : limitarDigitos(input.value, maxDigitosEfetivo)
     const digitosAntes = (textoDigitado.slice(0, input.selectionStart ?? input.value.length).match(/\d/g) ?? []).length
     const separadorAntes = /[,.]/.test(textoDigitado.slice(0, input.selectionStart ?? input.value.length))
     const normalizado = mascara === 'dinheiro'
       ? normalizarDinheiroInterativo(textoDigitado)
       : normalizarNumeroDigitado(textoDigitado, mascara)
+    const numero = Number(normalizado)
+    if ((normalizado && (!Number.isFinite(numero) || numero < minimo || (maximoEfetivo !== undefined && numero > maximoEfetivo)))
+      || normalizado === '-') return
     setRascunho(normalizado)
     onChange(normalizado)
     requestAnimationFrame(() => {
@@ -325,7 +358,7 @@ export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limit
         inputMode={mascara ? (mascara === 'inteiro' ? 'numeric' : 'decimal') : inputMode ?? (tipo === 'number' ? 'decimal' : undefined)}
         value={exibido}
         placeholder={placeholder ?? placeholderPadrao}
-        maxLength={maxDigitos === undefined ? limite : undefined}
+        maxLength={maxDigitosEfetivo === undefined ? limite : undefined}
         min={min}
         minLength={minLength}
         required={required}
@@ -359,7 +392,7 @@ export const Selecao = ({ rotulo, id, valor, onChange, opcoes, disabled, require
   rotulo: string; id: string; valor: string; onChange: (v: string) => void; opcoes: [string, string][]; disabled?: boolean; required?: boolean; placeholder?: string
 }) => (
   <label className="fl"><small>{rotulo}</small>
-    <select id={id} value={valor} disabled={disabled} required={required} data-testid={id} onChange={(e) => onChange(e.target.value)}>
+    <select id={id} className={!valor ? 'select-placeholder' : undefined} value={valor} disabled={disabled} required={required} data-testid={id} onChange={(e) => onChange(e.target.value)}>
       <option value="" disabled>{placeholder}</option>
       {opcoes.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
     </select></label>

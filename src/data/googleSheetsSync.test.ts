@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Db } from './db'
 import {
-  colunasCompativeis, mesclarLinhas, parseSheetRow, reconstruirSaldosSincronizados, selecionarLinhasSincronizadas,
+  colunasCompativeis, diagnosticarCabecalhos, mesclarLinhas, parseSheetRow, reconstruirSaldosSincronizados, selecionarLinhasSincronizadas,
   substituirTabelas, SYNC_TABLES, type SyncRow, type SyncTable,
 } from './googleSheetsSync'
 
@@ -66,7 +66,7 @@ describe('Google Sheets sync merge', () => {
       { name: 'estoque_minimo', type: 'REAL', notnull: 1, pk: 0, dflt_value: '0' },
       { name: 'motivo', type: 'TEXT', notnull: 0, pk: 0, dflt_value: null },
     ],
-    ['id', 'quantidade'])
+      ['id', 'quantidade'])
     expect(row).toEqual({ id: 'x', quantidade: 3, estoque_minimo: 0, motivo: null })
   })
 
@@ -81,16 +81,21 @@ describe('Google Sheets sync merge', () => {
     expect(colunasCompativeis([...oldHeaders, 'device_id'], currentHeaders)).toBe(true)
   })
 
+  it('identifies unexpected and duplicated sheet columns precisely', () => {
+    expect(diagnosticarCabecalhos(['id', 'nome', 'telefone', 'telefone', ''], ['id', 'nome', 'telefonep']))
+      .toBe(' Colunas desconhecidas: "telefone", (cabeçalho vazio). Coluna repetida: "telefone".')
+  })
+
   it('rebuilds inventory totals from merged movements instead of last-write-wins balances', () => {
     const data = {
       insumo: [{ id: 'flour', estoque_atual: 8 }],
       produto_variante: [{ id: 'pack', estoque_atual: 2 }],
       movimento_estoque: [
-      { item_tipo: 'insumo', item_id: 'flour', quantidade: 12, deleted_at: null },
-      { item_tipo: 'insumo', item_id: 'flour', quantidade: -5, deleted_at: null },
-      { item_tipo: 'variante', item_id: 'pack', quantidade: 4, deleted_at: null },
-      { item_tipo: 'variante', item_id: 'pack', quantidade: -1, deleted_at: null },
-      { item_tipo: 'variante', item_id: 'pack', quantidade: 9, deleted_at: '2026-10-06T12:00:00Z' },
+        { item_tipo: 'insumo', item_id: 'flour', quantidade: 12, deleted_at: null },
+        { item_tipo: 'insumo', item_id: 'flour', quantidade: -5, deleted_at: null },
+        { item_tipo: 'variante', item_id: 'pack', quantidade: 4, deleted_at: null },
+        { item_tipo: 'variante', item_id: 'pack', quantidade: -1, deleted_at: null },
+        { item_tipo: 'variante', item_id: 'pack', quantidade: 9, deleted_at: '2026-10-06T12:00:00Z' },
       ],
     }
     reconstruirSaldosSincronizados(data)
@@ -120,7 +125,7 @@ describe('Google Sheets sync merge', () => {
       query: async <T,>() => [{
         table: 'venda_item', rowid: 17, parent: 'produto_variante', fkid: 0,
       }] as T[],
-      run: async () => {},
+      run: async () => { },
       transaction: async (operation) => operation(),
     }
     const schema = emptyTables<{ name: string; type: string; notnull: number; pk: number; dflt_value: unknown }>()

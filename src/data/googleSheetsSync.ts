@@ -94,7 +94,8 @@ export async function sincronizarPlanilha(
     const values = valueRanges[index + 1]?.values ?? []
     const headers = (values[0]?.map(String) ?? []).map(normalizarCabecalho)
     if (!colunasCompativeis(headers, columns.map((column) => column.name))) {
-      throw new Error(`As colunas da aba "${table}" não correspondem ao esquema do aplicativo.`)
+      const problema = diagnosticarCabecalhos(headers, columns.map((column) => column.name))
+      throw new Error(`As colunas da aba "${table}" não correspondem ao esquema do aplicativo.${problema}`)
     }
     const remote = values.slice(1).filter((row) => row.some((value) => value !== '' && value != null))
       .map((row) => {
@@ -301,6 +302,25 @@ export function colunasCompativeis(left: string[], right: string[]): boolean {
   if (duplicateColumns.some((column) => column !== 'device_id')) return false
   const normalized = cleaned.filter((column) => column !== 'sinal_cents')
   return normalized.every((column) => right.includes(column))
+}
+
+export function diagnosticarCabecalhos(headers: string[], expected: string[]): string {
+  const normalizedHeaders = headers.map(normalizarCabecalho)
+  const unexpected = normalizedHeaders.filter((column, index) =>
+    normalizedHeaders.indexOf(column) === index && column !== 'sinal_cents' && !expected.includes(column))
+  const duplicates = [...new Set(normalizedHeaders.filter((column, index) =>
+    column !== 'device_id' && normalizedHeaders.indexOf(column) !== index))]
+
+  const parts: string[] = []
+  if (unexpected.length) {
+    parts.push(` Coluna${unexpected.length > 1 ? 's' : ''} desconhecida${unexpected.length > 1 ? 's' : ''}: ${unexpected.map((column) =>
+      column ? `"${column}"` : '(cabeçalho vazio)').join(', ')}.`)
+  }
+  if (duplicates.length) {
+    parts.push(` Coluna${duplicates.length > 1 ? 's' : ''} repetida${duplicates.length > 1 ? 's' : ''}: ${duplicates.map((column) =>
+      `"${column}"`).join(', ')}.`)
+  }
+  return parts.join('')
 }
 
 function normalizarCabecalho(column: string): string {

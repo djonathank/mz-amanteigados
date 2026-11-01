@@ -35,7 +35,7 @@ Emissão de nota fiscal, integração bancária, loja online própria e controle
 | **3** | Clientes, fornecedores, encomendas com sinal e financeiro integrado | Operação completa do dia a dia |
 | **4** | Relatórios por período, exportação CSV/PDF e espelho no Google Sheets | Visão gerencial e sincronização entre aparelhos |
 | **5** | Preços por canal, kits, rendimento real, recompra, custo de entrega/feira, controle de faturamento | Evolução do negócio |
-| **6** | Alérgenos e tabela nutricional, QR Pix, rastreabilidade por lote, calendário, pedido por WhatsApp, ficha de produção | Qualidade e operação |
+| **6** | Alérgenos e tabela nutricional, QR Pix, rastreabilidade por lote, calendário, pedido por telefone, ficha de produção | Qualidade e operação |
 
 **Regra de modelagem:** o banco já nasce com campos das Fases 5 e 6 (alérgenos no insumo, lote ligado à venda, tabela de preço por canal), mesmo que as telas venham depois.
 
@@ -115,7 +115,7 @@ insumo(id, nome, tipo,            -- 'ingrediente' | 'embalagem' | 'rotulo'
   fornecedor_id, ativo)
 
 fornecedor(id, nome, contato, observacoes)
-cliente(id, nome, whatsapp, endereco, aniversario, observacoes, tipo_preco_id)
+cliente(id, nome, telefone, endereco, aniversario, observacoes, tipo_preco_id)
 
 -- Receitas e produtos
 receita(id, nome, rendimento_qtd, rendimento_unidade, perda_pct, tempo_min, modo_preparo)
@@ -168,7 +168,7 @@ O esquema de produção é aplicado pela migração `007_phase2_4.sql` (versão 
 
 ### 4.3 Entidades previstas para as Fases 5 e 6
 
-`tabela_preco` e `tabela_preco_item` (canais), `kit` e `kit_item`, `custo_entrega` (feira, combustível, horas), `pedido_whatsapp_rascunho`. Não criar as tabelas antes da fase, mas manter `tabela_preco_id` em `venda` e `lote_id` em `venda_item` desde a V1.
+`tabela_preco` e `tabela_preco_item` (canais), `kit` e `kit_item`, `custo_entrega` (feira, combustível, horas), `pedido_telefone_rascunho`. Não criar as tabelas antes da fase, mas manter `tabela_preco_id` em `venda` e `lote_id` em `venda_item` desde a V1.
 
 ---
 
@@ -349,11 +349,11 @@ A planilha criada no Drive da conta do usuário é acessada diretamente pelas AP
 
 ## 9. Segurança e privacidade (LGPD)
 
-- Dados pessoais de clientes (nome, WhatsApp, endereço) ficam no aparelho e, se a sincronização estiver ligada, na planilha do **próprio Drive do usuário**. O compartilhamento com outros usuários não é configurado pelo app.
+- Dados pessoais de clientes (nome, telefone, endereço) ficam no aparelho e, se a sincronização estiver ligada, na planilha do **próprio Drive do usuário**. O compartilhamento com outros usuários não é configurado pelo app.
 - No Android/iOS a autenticação usa o plugin Google nativo; na web o token de acesso fica apenas em memória. Desconectar remove a sessão local e, na web, revoga o token atual.
 - Bloqueio opcional do app por PIN ou biometria (plugin Capacitor).
 - Backup com senha opcional (criptografia AES no arquivo exportado).
-- Nenhum dado enviado a terceiros sem ação do usuário; compartilhar no WhatsApp usa o menu do sistema ou `wa.me`.
+- Nenhum dado enviado a terceiros sem ação do usuário; compartilhar no telefone usa o menu do sistema ou `wa.me`.
 - Registro mínimo: coletar apenas o necessário. Remover cliente apaga seus dados pessoais e desvincula o cadastro, preservando vendas e registros financeiros anonimizados para auditoria.
 
 ---
@@ -372,7 +372,7 @@ A planilha criada no Drive da conta do usuário é acessada diretamente pelas AP
 | QR Pix | Gerar o BR Code estático (payload EMV do Banco Central com CRC16-CCITT) localmente, com valor e chave configurados; renderizar QR e "copia e cola" offline |
 | Rastreabilidade | `venda_item.lote_id`; consulta inversa lote → clientes |
 | Calendário | Visão semanal/mensal sobre `encomenda`, com carga de produção por dia e capacidade diária configurável |
-| Pedido por WhatsApp | Texto colado → extração de itens, quantidades e data por regras (com IA opcional); **sempre** exige confirmação antes de criar |
+| Pedido por telefone | Texto colado → extração de itens, quantidades e data por regras (com IA opcional); **sempre** exige confirmação antes de criar |
 | Ficha de produção | Receita escalada para a quantidade do dia, em gramas, exportada em PDF |
 
 ---
@@ -491,7 +491,7 @@ Todo elemento interativo recebe `data-testid` e rótulo de acessibilidade no for
 | Precificação | Rateio de custos fixos é subjetivo | Parâmetro simples (valor mensal ÷ lotes estimados) editável |
 | Alérgenos e nutrição | Informação com implicação legal em rótulo | Tratar como apoio; revisar com responsável técnico antes de imprimir |
 | QR Pix | Detalhes do padrão do Banco Central | Validar a geração com leitores de bancos diferentes |
-| Pedido por WhatsApp com IA | Custo, privacidade e erros de interpretação | Começar por regras simples; IA opcional com confirmação |
+| Pedido por telefone com IA | Custo, privacidade e erros de interpretação | Começar por regras simples; IA opcional com confirmação |
 | Nota fiscal | Varia por cidade e regime | Fora do escopo; avaliar integração depois |
 
 ### Próximos passos recomendados

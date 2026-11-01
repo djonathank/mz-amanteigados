@@ -19,7 +19,7 @@ interface Linha {
   quantidadeBase: number
 }
 
-const UNIDADES: [string, string][] = [['un', 'unidades'], ['g', 'gramas'], ['kg', 'quilogramas'], ['ml', 'mililitros'], ['l', 'litros']]
+const UNIDADES: [string, string][] = [['un', 'Unidades'], ['g', 'Gramas'], ['kg', 'Quilogramas'], ['ml', 'Mililitros'], ['l', 'Litros']]
 const normalizarNomeReceita = (value: string) => value.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 60)
 const unidadeBase = (unidade: Unit) => unidade === 'kg' ? 'g' : unidade === 'l' ? 'ml' : unidade
 
@@ -133,7 +133,7 @@ export default function Receitas() {
       erroCalculo = e instanceof Error ? e.message : String(e)
     }
   }
-  const rendimentoUtil = Number(rend) > 0 && Number(perda) >= 0 && Number(perda) < 100
+  const rendimentoUtil = Number(rend) > 0 && !!unidade && Number(perda) >= 0 && Number(perda) < 100
     ? toBase(Number(rend), unidade as Unit) * (1 - Number(perda) / 100)
     : 0
   const custoPorSaida = rendimentoUtil > 0 ? custoLote / rendimentoUtil : 0
@@ -315,7 +315,7 @@ export default function Receitas() {
         <div className="g recipe-yield-fields">
           <Campo rotulo="Rendimento" id="receita.rendimento" valor={rend} onChange={setRend}
             mascara={unidade === 'un' ? 'inteiro' : 'quantidade'} limite={60} />
-          <Selecao rotulo="Unidade do rendimento" id="receita.unidade" valor={unidade} onChange={setUnidade} opcoes={UNIDADES} />
+          <Selecao rotulo="Unidade do rendimento" id="receita.unidade" valor={unidade} onChange={setUnidade} opcoes={UNIDADES} required />
         </div>
         <div className="g">
           <Campo rotulo="Perda ou quebra (%)" id="receita.perda" valor={perda} onChange={setPerda} mascara="percentual" maxDigitos={10} />
@@ -338,7 +338,7 @@ export default function Receitas() {
           <div className="g ingredient-controls">
             <Campo rotulo={quantidadeItemLabel ? `Quantidade (${quantidadeItemLabel})` : 'Quantidade'} id="receita.quantidade"
               valor={qtd} onChange={setQtd} mascara="quantidade" maxDigitos={10} disabled={!sel} />
-            <button className="bt o add-line" type="button" onClick={adicionar} disabled={!sel || !(Number(qtd) > 0)} data-testid="receita.adicionar-ingrediente"><Icon name="add" /> Adicionar ingrediente</button>
+            <button className="bt o add-line" type="button" onClick={adicionar} disabled={!sel || !(Number(qtd) > 0)} data-testid="receita.adicionar-ingrediente"><Icon name="add" /> Adicionar </button>
           </div>
         </div>
         {linhas.length > 0 && rendimentoUtil > 0 && !!unidade && perda.trim() !== '' && !erroCalculo && (

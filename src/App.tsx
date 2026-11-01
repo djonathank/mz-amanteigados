@@ -41,7 +41,8 @@ function destinoCadastro(pathname: string): string {
   if (pathname === '/clientes' || pathname === '/fornecedores') return `${pathname}#${pathname.slice(1)}-form`
   if (pathname === '/encomendas') return '/vender'
   if (pathname === '/financeiro') return '/financeiro#financeiro-form'
-  if (['/mais', '/menu', '/relatorios', '/custos', '/categorias', '/precificacao'].includes(pathname)) return '/vender'
+  if (pathname === '/categorias') return '/categorias#categoria-form'
+  if (['/mais', '/menu', '/relatorios', '/custos', '/precificacao'].includes(pathname)) return '/vender'
   return pathname
 }
 
@@ -83,7 +84,9 @@ function Navegacao() {
               aria-label="Criar novo"
               data-testid="nav.add"
               onClick={abrirCadastro}
-            />
+            >
+              <span className="nav-add-symbol" aria-hidden="true">+</span>
+            </button>
           )
         }
 

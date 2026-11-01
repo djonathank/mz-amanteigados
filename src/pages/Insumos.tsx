@@ -8,8 +8,15 @@ import { gerarCsv } from '../data/reports'
 import { AlertaConclusao, Campo, ConfirmacaoAcao, FecharModal, focarCampo, Icon, Selecao, SeletorData, useModalAcessivel } from './ui'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { filtrarEntradaNumerica, filtrarNumeroSemMascara } from '../domain/inputMask'
+import { localDateString } from '../domain/date'
 
-const UNIDADES: [string, string][] = [['kg', 'kg'], ['g', 'g'], ['l', 'L'], ['ml', 'ml'], ['un', 'unidades']]
+const UNIDADES: [string, string][] = [
+  ['kg', 'Quilograma'],
+  ['g', 'Grama'],
+  ['l', 'Litro'],
+  ['ml', 'Mililitro'],
+  ['un', 'Unidade'],
+]
 const TIPOS: [string, string][] = [['ingrediente', 'Ingrediente'], ['embalagem', 'Embalagem'], ['rotulo', 'Rótulo']]
 const TIPOS_MOVIMENTO: [string, string][] = [
   ['ajuste', 'Ajuste'],
@@ -205,7 +212,8 @@ export default function Insumos() {
   const minimo = Number(estoqueMinimo)
   const minimoValido = estoqueMinimo.trim() !== '' && Number.isInteger(minimo) && minimo >= 0
   const quantidadeUnitariaValida = unidade !== 'un' || !qtd.trim() || Number.isInteger(Number(qtd))
-  const valido = nome.trim() !== '' && !!tipo && !!unidade && dadosCustoValidos && minimoValido && quantidadeUnitariaValida
+  const nomeValido = nome.trim().length >= 2 && nome.trim().length <= 60
+  const valido = nomeValido && !!tipo && !!unidade && dadosCustoValidos && minimoValido && quantidadeUnitariaValida
   const salvar = async () => {
     if (!valido || !unidade || salvando) return
     const atualizando = Boolean(editando)
@@ -566,7 +574,7 @@ export default function Insumos() {
         id="estoque-descartar-movimento"
         titulo="Descartar movimentação?"
         mensagem="Os dados informados neste ajuste ainda não foram salvos."
-        confirmar="Descartar dados"
+        confirmar="Descartar"
         onCancelar={() => setConfirmarDescarteMovimento(false)}
         onConfirmar={descartarMovimento}
       />}
@@ -585,7 +593,7 @@ export default function Insumos() {
         </button>
         <div className="search-field">
           <Icon name="stock" />
-          <input aria-label="Buscar insumo" placeholder="Buscar insumo..." onChange={(event) => setFiltro(event.target.value)} />
+          <input aria-label="Buscar insumo" placeholder="Buscar insumo..." maxLength={200} onChange={(event) => setFiltro(event.target.value)} />
         </div>
         <Selecao rotulo="Tipo de insumo" id="estoque.filtro-tipo" valor={tipoFiltro} onChange={setTipoFiltro}
           opcoes={[['todos', 'Todos'], ...TIPOS]} />
@@ -595,7 +603,7 @@ export default function Insumos() {
       {alertas.some((item) => item.tipo === 'variante') && <div className="cd">
         <h2>Produtos acabados para reposição</h2>
         {alertas.filter((item) => item.tipo === 'variante').map((item) => <div className="r" key={item.id}>
-          <span>{item.nome}<small>Saldo {formatQuantity(item.saldo)} pacote(s) · mínimo {formatQuantity(item.minimo)}</small></span>
+        <span className="stock-row-label" title={item.nome}><span className="stock-row-name">{item.nome}</span><small>Saldo {formatQuantity(item.saldo)} pacote(s) · mínimo {formatQuantity(item.minimo)}</small></span>
           <Link className="lk" to="/produtos">Gerenciar</Link>
         </div>)}
       </div>}
@@ -608,7 +616,9 @@ export default function Insumos() {
         {!carregando && itensVisiveis.map((insumo) => (
           <div className="r stock-row" key={insumo.id} data-testid="insumo.item">
             <span className="ic" aria-hidden="true"><Icon name={insumo.tipo === 'ingrediente' ? 'recipe' : 'box'} /></span>
-            <div className="stock-row-content">{insumo.nome}<small>Tipo: {TIPOS.find(([tipo]) => tipo === insumo.tipo)?.[1] ?? insumo.tipo}</small>
+            <div className="stock-row-content">
+              <span className="stock-row-name" title={insumo.nome}>{insumo.nome}</span>
+              <small>Tipo: {TIPOS.find(([tipo]) => tipo === insumo.tipo)?.[1] ?? insumo.tipo}</small>
               <small>{formatBRL(insumo.custo_medio * insumo.fator_compra)} por {insumo.unidade_compra}</small>
               <small>Saldo: {formatQuantity(Number(insumo.estoque_atual ?? 0))} {insumo.unidade_base} · mínimo: {formatQuantity(Number(insumo.estoque_minimo ?? 0))} {insumo.unidade_base}</small>
             </div>
@@ -646,20 +656,23 @@ export default function Insumos() {
         <div className="stock-filters">
           <div className="search-field">
             <Icon name="stock" />
-            <input aria-label="Buscar movimentação" placeholder="Buscar por insumo..." value={filtroMovimento}
+            <input aria-label="Buscar movimentação" placeholder="Buscar por insumo..." value={filtroMovimento} maxLength={200}
               onChange={(event) => setFiltroMovimento(event.target.value)} />
           </div>
           <Selecao rotulo="Tipo de movimentação" id="estoque.filtro-movimento" valor={tipoMovimentoFiltro}
             onChange={setTipoMovimentoFiltro} opcoes={FILTROS_MOVIMENTO} />
-          <SeletorData rotulo="De" id="estoque.movimentos.data-inicial" valor={dataInicialMovimento} onChange={setDataInicialMovimento} />
-          <SeletorData rotulo="Até" id="estoque.movimentos.data-final" valor={dataFinalMovimento} onChange={setDataFinalMovimento} />
+          <SeletorData rotulo="De" id="estoque.movimentos.data-inicial" valor={dataInicialMovimento} max={dataFinalMovimento || localDateString()} onChange={(valor) => {
+            setDataInicialMovimento(valor)
+            if (dataFinalMovimento && dataFinalMovimento < valor) setDataFinalMovimento(valor)
+          }} />
+          <SeletorData rotulo="Até" id="estoque.movimentos.data-final" valor={dataFinalMovimento} min={dataInicialMovimento} max={localDateString()} onChange={setDataFinalMovimento} />
         </div>
         <p className="helper">Exibindo {movimentosLista.length} {movimentosLista.length === 1 ? 'movimentação' : 'movimentações'}.</p>
         {carregandoMovimentos && <p className="notice" role="status">Carregando movimentações...</p>}
         {!carregandoMovimentos && !movimentosLista.length && <p className="notice">As movimentações aparecerão aqui após compras, ajustes e vendas.</p>}
         {movimentosLista.length > 0 && movimentosVisiveis.length === 0 && <p className="notice">Nenhuma movimentação encontrada para estes filtros.</p>}
         {movimentosVisiveis.map((movement) => <div className="r" key={movement.id}>
-          <span>{movement.item_nome}<small>
+          <span className="stock-row-label" title={movement.item_nome}><span className="stock-row-name">{movement.item_nome}</span><small>
             {FILTROS_MOVIMENTO.find(([type]) => type === movement.tipo)?.[1] ?? movement.tipo} · {new Date(movement.data).toLocaleString('pt-BR')}
             <br />Saldo anterior: {formatQuantity(movement.saldo_resultante - movement.quantidade)} {movement.unidade} → Saldo atual: {formatQuantity(movement.saldo_resultante)} {movement.unidade}
           </small></span>
@@ -677,15 +690,15 @@ export default function Insumos() {
         {!editando && <p className="helper">Cadastre seu primeiro insumo Informe o nome, tipo de insumo, unidade de medida, quantidade, valor e estoque mínimo para iniciar o controle de estoque</p>}
         {editando && <p className="helper">Atualize os dados cadastrais do insumo. Os campos tipo, unidade de compra e quantidade inicial permanecem bloqueados para garantir a integridade do histórico. O custo médio só será recalculado se o valor for alterado.</p>}
         {erro && <p className="notice error" role="alert">{erro}</p>}
-        <Campo rotulo="Nome Completo" id="insumo.nome" valor={nome} onChange={setNome} placeholder="Ex.: farinha de trigo" />
-        <Selecao rotulo="Tipo de insumo" id="insumo.tipo" valor={tipo} onChange={setTipo} opcoes={TIPOS} disabled={Boolean(editando)} />
+        <Campo rotulo="Nome Completo" id="insumo.nome" valor={nome} onChange={setNome} placeholder="Ex.: farinha de trigo" limite={60} minLength={2} required />
+        <Selecao rotulo="Tipo de insumo" id="insumo.tipo" valor={tipo} onChange={setTipo} opcoes={TIPOS} disabled={Boolean(editando)} required />
         <div className="g">
           <Campo rotulo="Quantidade" id="insumo.quantidade" valor={qtd}
             onChange={(value) => setQtd(filtrarNumeroSemMascara(value))} inputMode="decimal" disabled={Boolean(editando)}
             limite={15} placeholder="Ex.: 1.5 ou 14000" />
           <Selecao rotulo="Unidade de compra" id="insumo.unidade" valor={unidade} onChange={(value) => {
             setUnidade(value as Unit)
-          }} opcoes={UNIDADES} disabled={Boolean(editando)} />
+          }} opcoes={UNIDADES} disabled={Boolean(editando)} required />
         </div>
         {unidade === 'un' && !quantidadeUnitariaValida && <p className="notice error" role="alert">Para unidades, informe uma quantidade inteira.</p>}
         <Campo rotulo="Valor total (R$)" id="insumo.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
@@ -698,7 +711,7 @@ export default function Insumos() {
         {/* <p className="helper">Informe um valor inteiro para receber o alerta de reposição. Novos insumos começam com estoque mínimo zero.</p> */}
         <div className="form-actions">
           <button className="bt o" type="button" disabled={salvando} onClick={fecharFormulario}>
-            {editando ? 'Cancelar edição' : 'Cancelar'}
+            {editando ? 'Cancelar' : 'Cancelar'}
           </button>
           <button className="bt" disabled={!valido || salvando} data-testid="insumo.salvar" onClick={salvar}>
             {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}

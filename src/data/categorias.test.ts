@@ -32,9 +32,9 @@ describe('financial categories', () => {
     const { db, calls } = fakeDb()
     await salvarCategoriaFinanceira(db, { nome: 'Ingredientes', cor: '#704214' })
     expect(calls[0].sql).toContain('INSERT INTO categoria_financeira')
-    expect(calls[0].params.slice(1, 3)).toEqual(['Ingredientes', '#704214'])
+    expect(calls[0].params.slice(1, 4)).toEqual(['Ingredientes', '#704214', '[]'])
     await expect(salvarCategoriaFinanceira(db, { nome: 'A& B', cor: '#704214' })).rejects.toThrow(/caracteres especiais/)
-    await expect(salvarCategoriaFinanceira(db, { nome: 'A', cor: '#704214' })).rejects.toThrow(/2 a 60/)
+    await expect(salvarCategoriaFinanceira(db, { nome: 'A', cor: '#704214' })).rejects.toThrow(/3 a 20/)
     await expect(salvarCategoriaFinanceira(db, { nome: 'Vendas', cor: '#ffffff' })).rejects.toThrow(/contraste/)
   })
 

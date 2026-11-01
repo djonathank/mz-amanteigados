@@ -13,6 +13,12 @@ function fakeDb(queryRows: (sql: string) => unknown[] = () => []) {
 }
 
 describe('salvarInsumo', () => {
+  it('rejects names shorter than 2 or longer than 60 characters', async () => {
+    const f = fakeDb()
+    await expect(salvarInsumo(f.db, { nome: 'A', unidade: 'kg' })).rejects.toThrow(/2 e 60/)
+    await expect(salvarInsumo(f.db, { nome: 'A'.repeat(61), unidade: 'kg' })).rejects.toThrow(/2 e 60/)
+  })
+
   it.each(['farinha', 'FARINHA', 'Farinha'])('saves "%s" as "Farinha"', async (nome) => {
     const f = fakeDb()
     await salvarInsumo(f.db, { nome, unidade: 'kg', quantidade: 2, totalCents: 5000 })
@@ -21,6 +27,24 @@ describe('salvarInsumo', () => {
   })
 
   describe('salvarProduto', () => {
+    it('rejects product names longer than 200 characters', async () => {
+      const f = fakeDb()
+      await expect(salvarProduto(f.db, {
+        nome: 'A'.repeat(201),
+        receitaId: 'recipe',
+        variantes: [{ nome: 'Pacote', unidades: 1, precoCents: 500 }],
+      })).rejects.toThrow('até 200 caracteres')
+    })
+
+    it('rejects variant names longer than 200 characters', async () => {
+      const f = fakeDb()
+      await expect(salvarProduto(f.db, {
+        nome: 'Bolacha',
+        receitaId: 'recipe',
+        variantes: [{ nome: 'A'.repeat(201), unidades: 1, precoCents: 500 }],
+      })).rejects.toThrow('até 200 caracteres')
+    })
+
     it('normalizes package variant names such as "Pacote 150g"', async () => {
       const f = fakeDb((sql) => sql.includes('SELECT rendimento_unidade FROM receita')
         ? [{ rendimento_unidade: 'un' }]
@@ -42,19 +66,19 @@ describe('salvarInsumo', () => {
     it('accepts the maximum currency and percentage settings', async () => {
       const f = fakeDb()
       await salvarConfig(f.db, {
-        gas_lote: '999.99',
-        hora_trabalho: '999.99',
+        gas_lote: '999999',
+        hora_trabalho: '999999',
         taxa_pix: '100',
         taxa_cartao: '100',
         margem_padrao: '100',
       })
-      expect(f.calls.find((call) => call.params[0] === 'gas_lote_cents')?.params[1]).toBe('99999')
-      expect(f.calls.find((call) => call.params[0] === 'valor_hora_cents')?.params[1]).toBe('99999')
+      expect(f.calls.find((call) => call.params[0] === 'gas_lote_cents')?.params[1]).toBe('99999900')
+      expect(f.calls.find((call) => call.params[0] === 'valor_hora_cents')?.params[1]).toBe('99999900')
     })
 
     it.each([
-      { gas_lote: '1000' },
-      { hora_trabalho: '1000' },
+      { gas_lote: '1000000' },
+      { hora_trabalho: '1000000' },
       { taxa_pix: '100.01' },
       { margem_padrao: '-1' },
     ])('rejects out-of-range settings %#', (values) => {

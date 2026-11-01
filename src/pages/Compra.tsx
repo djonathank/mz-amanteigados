@@ -12,8 +12,15 @@ import { listarFornecedores, type FornecedorRow } from '../data/phase3'
 import { AlertaConclusao, Campo, ConfirmacaoAcao, FecharModal, focarCampo, Icon, Selecao, SeletorData, useModalAcessivel } from './ui'
 import { formatBRL } from '../domain/money'
 import { filtrarNumeroSemMascara } from '../domain/inputMask'
+import { localDateString } from '../domain/date'
 
-const UNIDADES: [string, string][] = ['kg', 'g', 'l', 'ml', 'un'].map((u) => [u, u])
+const UNIDADES: [string, string][] = [
+  ['kg', 'Quilograma'],
+  ['g', 'Grama'],
+  ['l', 'Litro'],
+  ['ml', 'Mililitro'],
+  ['un', 'Unidade'],
+]
 const FORMAS_PAGAMENTO: [string, string][] = [
   ['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao_debito', 'Cartão de débito'],
   ['cartao_credito', 'Cartão de crédito'], ['transferencia', 'Transferência'],
@@ -179,7 +186,8 @@ export default function Compra() {
     const unidade = linha.unidade as Unit
     const quantidade = Number(linha.quantidade)
     const totalCents = Math.round(Number(linha.total) * 100)
-    const compativel = Boolean(insumo && linha.unidade && baseOf(unidade) === insumo.unidade_base)
+    const unidadeValida = UNIDADES.some(([value]) => value === linha.unidade)
+    const compativel = Boolean(insumo && unidadeValida && baseOf(unidade) === insumo.unidade_base)
     const valido = Boolean(insumo && compativel && Number.isFinite(quantidade) && quantidade > 0
       && Number.isSafeInteger(totalCents) && totalCents > 0)
     const custo = valido ? costPerBase(totalCents, quantidade, unidade) : 0
@@ -221,6 +229,7 @@ export default function Compra() {
     !itensCompra.length ? 'Adicione ao menos um item.' : '',
     itensCompra.some((item) => !item.valido) ? 'Revise os itens: insumo, unidade, quantidade e valor precisam ser válidos.' : '',
     !Number.isSafeInteger(totalCompra) || totalCompra <= 0 ? 'O total da compra precisa ser maior que zero.' : '',
+    Boolean(compraEditando) && !motivoEdicao.trim() ? 'Informe o motivo da edição.' : '',
     pago === '0' && !vencimento ? 'Informe o vencimento da compra não paga.' : '',
     pago === '0' && vencimento && vencimento < hoje ? 'O vencimento deve ser hoje ou uma data futura.' : '',
     pago === '0' && vencimento && vencimento < dataCompra ? 'O vencimento não pode ser anterior à data da compra.' : '',
@@ -375,8 +384,11 @@ export default function Compra() {
           <div className="search-field"><Icon name="stock" /><input aria-label="Buscar compra" placeholder="Buscar insumo ou fornecedor" value={busca} onChange={(event) => setBusca(event.target.value)} /></div>
           <div className="purchase-supplier"><Selecao rotulo="Fornecedor" id="compra.filtro-fornecedor" valor={filtroFornecedor || 'todos'} onChange={(value) => setFiltroFornecedor(value === 'todos' ? '' : value)}
             opcoes={[['todos', 'Todos'], ...fornecedores.map((row) => [row.id, row.nome] as [string, string])]} /></div>
-          <SeletorData rotulo="De" id="compras.data-inicial" valor={dataInicial} onChange={setDataInicial} />
-          <SeletorData rotulo="Até" id="compras.data-final" valor={dataFinal} onChange={setDataFinal} />
+          <SeletorData rotulo="De" id="compras.data-inicial" valor={dataInicial} max={dataFinal || localDateString()} onChange={(valor) => {
+            setDataInicial(valor)
+            if (dataFinal && dataFinal < valor) setDataFinal(valor)
+          }} />
+          <SeletorData rotulo="Até" id="compras.data-final" valor={dataFinal} min={dataInicial} max={localDateString()} onChange={setDataFinal} />
         </div>
         {!comprasExibidas.length && <p className="notice">Nenhuma compra encontrada para estes filtros.</p>}
         {comprasExibidas.map((compra) => <article className="purchase-row" key={compra.id}>
@@ -443,7 +455,7 @@ export default function Compra() {
             </p>}
           </div>)}
           <button className="bt o" type="button" onClick={() => setLinhas((items) => [...items, novaLinha()])}>
-            <Icon name="add" /> Adicionar outro item
+            <Icon name="add" /> Adicionar
           </button>
           <h3>Pagamento</h3>
           {compraEditando
@@ -467,7 +479,7 @@ export default function Compra() {
             </>}
           {compraEditando && <>
             <Campo rotulo="Motivo da edição" id="compra.motivo-edicao" valor={motivoEdicao}
-              onChange={setMotivoEdicao} limite={100} placeholder="Ex.: correção da quantidade recebida" />
+              onChange={setMotivoEdicao} limite={100} required placeholder="Ex.: correção da quantidade recebida" />
             {/* <p className="helper">Se informado, o motivo será guardado com os dados anteriores e atualizados da compra.</p> */}
           </>}
           {validacaoFormularioAtiva && !valido && <ul className="form-validation-hints" aria-label="Itens pendentes para salvar">
@@ -478,9 +490,9 @@ export default function Compra() {
             <div className="purchase-total"><span>Total da compra</span><b>{formatBRL(totalCompra)}</b></div>
             <div className="form-actions">
               <button className="bt o" type="button" disabled={salvando} onClick={descartarFormulario}>
-                {compraEditando ? 'Cancelar edição' : 'Cancelar'}
+                {compraEditando ? 'Cancelar' : 'Cancelar'}
               </button>
-              <button className="bt" type="button" disabled={salvando} data-testid="compra.salvar" onClick={() => void salvar()}>
+              <button className="bt" type="button" disabled={!valido || salvando} data-testid="compra.salvar" onClick={() => void salvar()}>
                 {salvando ? 'Salvando...' : compraEditando ? 'Salvar' : 'Salvar'}
               </button>
             </div>
@@ -490,7 +502,7 @@ export default function Compra() {
         id="compra-descartar-formulario"
         titulo="Descartar alterações?"
         mensagem="Os dados desta compra ainda não foram salvos e serão perdidos."
-        confirmar="Descartar alterações"
+        confirmar="Descartar"
         onCancelar={() => setConfirmarDescarteFormulario(false)}
         onConfirmar={descartarFormulario}
       />}
@@ -509,7 +521,7 @@ export default function Compra() {
               : <span>Média estimada após a compra: {formatBRL(mediaEstimada)} por {insumo?.unidade_base}</span>}
           </li>)}</ul>
           <p>{compraEditando ? 'Salvar esta edição' : 'Registrar a compra'} recalculará a média ponderada do estoque.</p>
-          <div className="alert-actions"><button className="bt o" type="button" onClick={() => setConfirmarCustoAberto(false)}>Voltar</button><button className="bt" type="button" onClick={() => void salvar(true)}>{compraEditando ? 'Confirmar edição' : 'Confirmar compra'}</button></div>
+          <div className="alert-actions"><button className="bt o" type="button" onClick={() => setConfirmarCustoAberto(false)}>Cancelar</button><button className="bt" type="button" onClick={() => void salvar(true)}>{compraEditando ? 'Confirmar' : 'Confirmar'}</button></div>
         </section>
       </div>}
       {carregandoDetalhe && <p className="notice" role="status">Carregando detalhes da compra...</p>}
@@ -532,16 +544,16 @@ export default function Compra() {
           {!compraDetalhe.pago && !compraDetalhe.cancelada_em && <>
             <Selecao rotulo="Forma de pagamento" id="compra.forma-quitar" valor={formaPagamentoDetalhe}
               onChange={setFormaPagamentoDetalhe} opcoes={FORMAS_PAGAMENTO} />
-            <button className="bt" type="button" onClick={() => void marcarComoPago(compraDetalhe.id)}>Marcar como paga</button>
+            <button className="bt" type="button" onClick={() => void marcarComoPago(compraDetalhe.id)}>Pagar</button>
             <button className="bt o" type="button" onClick={() => void abrirEdicao(compraDetalhe)}>
               {/* <Icon name="edit" />  */}
-              Editar compra
+              Editar
             </button>
           </>}
           {!compraDetalhe.pago && !compraDetalhe.cancelada_em && <button className="bt o danger-button" type="button" onClick={() => {
             setCompraCancelamento(compraDetalhe)
             setMotivoCancelamento('')
-          }}>Cancelar compra</button>}
+          }}>Cancelar</button>}
           {Boolean(compraDetalhe.pago) && !compraDetalhe.cancelada_em && <p className="notice warning">
             Compras pagas não podem ser canceladas por aqui para preservar a conciliação do caixa.
           </p>}
@@ -559,9 +571,9 @@ export default function Compra() {
             <input value={motivoCancelamento} onChange={(event) => setMotivoCancelamento(event.target.value)} />
           </label>
           <div className="alert-actions">
-            <button className="bt o" type="button" disabled={salvando} onClick={() => setCompraCancelamento(null)}>Voltar</button>
+            <button className="bt o" type="button" disabled={salvando} onClick={() => setCompraCancelamento(null)}>Cancelar</button>
             <button className="bt danger-button" type="button" disabled={salvando || !motivoCancelamento.trim()} onClick={() => void confirmarCancelamento()}>
-              {salvando ? 'Cancelando...' : 'Confirmar cancelamento'}
+              {salvando ? 'Cancelando...' : 'Confirmar'}
             </button>
           </div>
         </section>

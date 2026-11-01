@@ -11,6 +11,8 @@ import purchaseEditHistory from './migrations/012_purchase_edit_history.sql?raw'
 import stockMovementSequence from './migrations/013_stock_movement_sequence.sql?raw'
 import supplierAddress from './migrations/014_supplier_address.sql?raw'
 import financialCategories from './migrations/016_financial_categories.sql?raw'
+import categoryAdditionalColors from './migrations/017_category_additional_colors.sql?raw'
+import ledgerDescription from './migrations/018_ledger_description.sql?raw'
 
 const NOME = 'mzgestao'
 const sqlite = new SQLiteConnection(CapacitorSQLite)
@@ -206,6 +208,22 @@ async function abrir(): Promise<Db> {
   if (!feita16.values?.length) {
     await conn.execute(financialCategories)
     await conn.run('INSERT INTO _migracoes (versao) VALUES (16)', [], false)
+  }
+  const categoryColumns = await conn.query('PRAGMA table_info(categoria_financeira)')
+  if (!(categoryColumns.values ?? []).some((column: { name: string }) => column.name === 'cores_adicionais')) {
+    await conn.execute(categoryAdditionalColors)
+  }
+  const feita17 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 17')
+  if (!feita17.values?.length) {
+    await conn.run('INSERT INTO _migracoes (versao) VALUES (17)', [], false)
+  }
+  const ledgerColumns = await conn.query('PRAGMA table_info(lancamento)')
+  if (!(ledgerColumns.values ?? []).some((column: { name: string }) => column.name === 'descricao')) {
+    await conn.execute(ledgerDescription)
+  }
+  const feita18 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 18')
+  if (!feita18.values?.length) {
+    await conn.run('INSERT INTO _migracoes (versao) VALUES (18)', [], false)
   }
   let emTransacao = false
   const persistir = async () => { /* Spreadsheet is the persistent store. */ }

@@ -22,8 +22,8 @@ const validarTextoOpcional = (valor: string | null, campo: string) => {
 }
 const validarTelefone = (valor: string | null, campo: string) => {
   const digitos = (valor ?? '').replace(/\D/g, '')
-  if (digitos.length < 10 || digitos.length > 11) {
-    throw new Error(`${campo} deve conter de 10 a 11 números.`)
+  if (digitos.length < 11 || digitos.length > 11) {
+    throw new Error(`${campo} deve conter 11 números.`)
   }
   return digitos ? formatarTelefone(digitos) : ''
 }
@@ -38,7 +38,7 @@ const validarDataNascimento = (valor: string | null) => {
 }
 
 export interface ClienteRow {
-  id: string; nome: string; whatsapp: string | null; endereco: string | null
+  id: string; nome: string; telefone: string | null; endereco: string | null
   aniversario: string | null; observacoes: string | null
 }
 
@@ -49,7 +49,7 @@ export interface FornecedorRow {
 export interface EncomendaRow {
   id: string; cliente_id: string | null; cliente_nome: string | null; data_entrega: string
   status: OrderStatus; recebido_cents: number; total_cents: number; observacoes: string | null
-  origem: 'agendada' | 'agora'
+  origem: 'agendada' | 'agora'; venda_id: string | null
 }
 
 export interface EncomendaItemRow {
@@ -60,15 +60,15 @@ export interface EncomendaItemRow {
 export interface LancamentoRow {
   id: string; tipo: 'receita' | 'despesa'; categoria: string | null; valor_cents: number
   data: string; vencimento: string | null; pago: number; negocio: number
-  origem_tipo: string | null; origem_id: string | null
+  origem_tipo: string | null; origem_id: string | null; descricao: string | null
 }
 
 export const listarClientes = (db: Db) =>
-  db.query<ClienteRow>('SELECT id, nome, whatsapp, endereco, aniversario, observacoes FROM cliente WHERE deleted_at IS NULL ORDER BY nome')
+  db.query<ClienteRow>('SELECT id, nome, telefone, endereco, aniversario, observacoes FROM cliente WHERE deleted_at IS NULL ORDER BY nome')
 
 export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id?: string }) {
   const nome = validarNomeContato(input.nome, 'cliente')
-  const whatsapp = validarTelefone(input.whatsapp, 'O WhatsApp do cliente')
+  const telefone = validarTelefone(input.telefone, 'O telefone do cliente')
   const endereco = validarTextoOpcional(input.endereco, 'O endereço')
   const aniversario = validarDataNascimento(input.aniversario)
   const observacoes = validarTextoOpcional(input.observacoes, 'As observações')
@@ -78,13 +78,13 @@ export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id
     const [current] = await db.query<{ id: string }>('SELECT id FROM cliente WHERE id=? AND deleted_at IS NULL', [id])
     if (!current) throw new Error('O cliente que você está editando não foi encontrado.')
     await db.run(
-      'UPDATE cliente SET nome=?, whatsapp=?, endereco=?, aniversario=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
-      [nome, whatsapp, endereco || null, aniversario || null, observacoes || null, t, id],
+      'UPDATE cliente SET nome=?, telefone=?, endereco=?, aniversario=?, observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
+      [nome, telefone, endereco || null, aniversario || null, observacoes || null, t, id],
     )
   } else {
     await db.run(
-      'INSERT INTO cliente (id, nome, whatsapp, endereco, aniversario, observacoes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
-      [id, nome, whatsapp, endereco || null, aniversario || null, observacoes || null, t, t],
+      'INSERT INTO cliente (id, nome, telefone, endereco, aniversario, observacoes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)',
+      [id, nome, telefone, endereco || null, aniversario || null, observacoes || null, t, t],
     )
   }
   return id
@@ -93,7 +93,7 @@ export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id
 export async function excluirCliente(db: Db, id: string) {
   const t = agora()
   await db.transaction(async () => {
-    await db.run('UPDATE cliente SET nome=?, whatsapp=NULL, endereco=NULL, aniversario=NULL, observacoes=NULL, deleted_at=?, updated_at=? WHERE id=?',
+    await db.run('UPDATE cliente SET nome=?, telefone=NULL, endereco=NULL, aniversario=NULL, observacoes=NULL, deleted_at=?, updated_at=? WHERE id=?',
       ['Cliente removido', t, t, id])
     await db.run('UPDATE venda SET cliente_id=NULL, updated_at=? WHERE cliente_id=? AND deleted_at IS NULL', [t, id])
     await db.run('UPDATE encomenda SET cliente_id=NULL, updated_at=? WHERE cliente_id=? AND deleted_at IS NULL', [t, id])
@@ -105,7 +105,7 @@ export const listarFornecedores = (db: Db) =>
 
 export async function salvarFornecedor(db: Db, input: Omit<FornecedorRow, 'id'> & { id?: string }) {
   const nome = validarNomeContato(input.nome, 'fornecedor')
-  const contato = validarTelefone(input.contato, 'O WhatsApp do fornecedor')
+  const contato = validarTelefone(input.contato, 'O telefone do fornecedor')
   const endereco = validarTextoOpcional(input.endereco, 'O endereço')
   const observacoes = validarTextoOpcional(input.observacoes, 'As observações')
   const id = input.id ?? novoId()
@@ -137,12 +137,13 @@ export const listarEncomendas = (db: Db) =>
             COALESCE((SELECT SUM(l.valor_cents) FROM lancamento l
                       WHERE l.origem_tipo='encomenda' AND l.origem_id=e.id AND l.tipo='receita'
                       AND l.pago=1 AND l.deleted_at IS NULL), 0) AS recebido_cents,
-            e.total_cents, e.observacoes, 'agendada' AS origem
+            e.total_cents, e.observacoes, 'agendada' AS origem,
+            (SELECT v.id FROM venda v WHERE v.encomenda_id=e.id AND v.deleted_at IS NULL ORDER BY v.created_at DESC LIMIT 1) AS venda_id
      FROM encomenda e LEFT JOIN cliente c ON c.id=e.cliente_id
      WHERE e.deleted_at IS NULL
      UNION ALL
      SELECT v.id, v.cliente_id, c.nome AS cliente_nome, v.data AS data_entrega,
-            'finalizado' AS status, v.total_cents AS recebido_cents, v.total_cents, NULL AS observacoes, 'agora' AS origem
+            'finalizado' AS status, v.total_cents AS recebido_cents, v.total_cents, NULL AS observacoes, 'agora' AS origem, NULL AS venda_id
      FROM venda v LEFT JOIN cliente c ON c.id=v.cliente_id
      WHERE v.deleted_at IS NULL AND v.encomenda_id IS NULL
      ORDER BY data_entrega`,
@@ -221,11 +222,11 @@ async function criarLancamento(db: Db, input: {
      (id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, origem_tipo, origem_id, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [novoId(), input.tipo, input.categoria, input.valorCents, input.data, input.vencimento ?? input.data,
-      input.pago ? 1 : 0, 1, input.origemTipo ?? null, input.origemId ?? null, t, t],
+    input.pago ? 1 : 0, 1, input.origemTipo ?? null, input.origemId ?? null, t, t],
   )
 }
 
-export async function alterarStatusEncomenda(db: Db, id: string, status: OrderStatus) {
+export async function alterarStatusEncomenda(db: Db, id: string, status: OrderStatus, motivoCancelamento?: string) {
   const t = agora()
   await db.transaction(async () => {
     const [current] = await db.query<{ status: string }>('SELECT status FROM encomenda WHERE id=? AND deleted_at IS NULL', [id])
@@ -236,6 +237,16 @@ export async function alterarStatusEncomenda(db: Db, id: string, status: OrderSt
     if (!canTransition(currentStatus, status)) throw new Error(`Não é permitido alterar pedido de "${currentStatus}" para "${status}".`)
     await db.run('UPDATE encomenda SET status=?, updated_at=? WHERE id=?', [status === 'finalizado' ? 'entregue' : status, t, id])
     if (status === 'cancelado') {
+      const justificativa = motivoCancelamento?.trim()
+      if (!justificativa) throw new Error('Informe o motivo do cancelamento do pedido.')
+      const [order] = await db.query<{ observacoes: string | null }>(
+        'SELECT observacoes FROM encomenda WHERE id=? AND deleted_at IS NULL', [id],
+      )
+      const observacoesAnteriores = order?.observacoes?.trim() ?? ''
+      const observacoes = observacoesAnteriores
+        ? `${observacoesAnteriores}\nMotivo do cancelamento: ${justificativa}`
+        : `Motivo do cancelamento: ${justificativa}`
+      await db.run('UPDATE encomenda SET observacoes=?, updated_at=? WHERE id=? AND deleted_at IS NULL', [observacoes, t, id])
       await db.run('UPDATE lancamento SET deleted_at=?, updated_at=? WHERE origem_tipo=? AND origem_id=? AND pago=0 AND deleted_at IS NULL',
         [t, t, 'encomenda', id])
     }
@@ -286,16 +297,17 @@ export async function entregarEncomenda(db: Db, input: {
 
 export const listarLancamentos = (db: Db) =>
   db.query<LancamentoRow>(
-    `SELECT id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, origem_tipo, origem_id
+    `SELECT id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, origem_tipo, origem_id, descricao
      FROM lancamento WHERE deleted_at IS NULL ORDER BY COALESCE(vencimento, data) DESC, created_at DESC`,
   )
 
 export async function salvarLancamento(db: Db, input: {
   id?: string; tipo: 'receita' | 'despesa'; categoria: string; valorCents: number
-  data: string; vencimento?: string; pago: boolean; negocio: boolean
+  data: string; vencimento?: string; pago: boolean; negocio: boolean; descricao: string
 }) {
-  if (!input.categoria.trim() || !Number.isInteger(input.valorCents) || input.valorCents <= 0 || !input.data) {
-    throw new Error('Informe categoria, valor maior que zero e data do lançamento.')
+  const descricao = input.descricao.trim().slice(0, 100)
+  if (!input.categoria.trim() || !descricao || descricao.length > 100 || !Number.isInteger(input.valorCents) || input.valorCents <= 0 || !input.data) {
+    throw new Error('Informe descrição, categoria, valor maior que zero e data do lançamento.')
   }
   const t = agora()
   if (input.id) {
@@ -305,19 +317,19 @@ export async function salvarLancamento(db: Db, input: {
     if (!current) throw new Error('O lançamento que você está editando não foi encontrado.')
     if (current.origem_tipo !== null) throw new Error('Este lançamento é vinculado a uma compra, venda ou encomenda e não pode ser editado aqui.')
     await db.run(
-      `UPDATE lancamento SET tipo=?, categoria=?, valor_cents=?, data=?, vencimento=?, pago=?, negocio=?, updated_at=?
+      `UPDATE lancamento SET tipo=?, categoria=?, descricao=?, valor_cents=?, data=?, vencimento=?, pago=?, negocio=?, updated_at=?
        WHERE id=? AND deleted_at IS NULL AND origem_tipo IS NULL`,
-      [input.tipo, input.categoria.trim(), input.valorCents, input.data, input.vencimento || null, input.pago ? 1 : 0,
-        input.negocio ? 1 : 0, t, input.id],
+      [input.tipo, input.categoria.trim(), descricao, input.valorCents, input.data, input.vencimento || null, input.pago ? 1 : 0,
+      input.negocio ? 1 : 0, t, input.id],
     )
     return input.id
   }
   const id = novoId()
   await db.run(
     `INSERT INTO lancamento
-     (id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [id, input.tipo, input.categoria.trim(), input.valorCents, input.data, input.vencimento || null,
+     (id, tipo, categoria, descricao, valor_cents, data, vencimento, pago, negocio, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, input.tipo, input.categoria.trim(), descricao, input.valorCents, input.data, input.vencimento || null,
       input.pago ? 1 : 0, input.negocio ? 1 : 0, t, t],
   )
   return id
