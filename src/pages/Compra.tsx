@@ -47,7 +47,7 @@ export default function Compra() {
   const [linhas, setLinhas] = useState<LinhaCompra[]>([novaLinha()])
   const [fornecedor, setFornecedor] = useState('')
   const [pago, setPago] = useState('1')
-  const [formaPagamento, setFormaPagamento] = useState('pix')
+  const [formaPagamento, setFormaPagamento] = useState('')
   const [dataCompra, setDataCompra] = useState(dataHoje)
   const [vencimento, setVencimento] = useState('')
   const [busca, setBusca] = useState('')
@@ -58,7 +58,7 @@ export default function Compra() {
   const [itensDetalhe, setItensDetalhe] = useState<CompraItemRow[]>([])
   const [compraEditando, setCompraEditando] = useState<CompraRow | null>(null)
   const [motivoEdicao, setMotivoEdicao] = useState('')
-  const [formaPagamentoDetalhe, setFormaPagamentoDetalhe] = useState('pix')
+  const [formaPagamentoDetalhe, setFormaPagamentoDetalhe] = useState('')
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [compraCancelamento, setCompraCancelamento] = useState<CompraRow | null>(null)
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
@@ -106,7 +106,7 @@ export default function Compra() {
     setLinhas([linhaInicial])
     setFornecedor('')
     setPago('1')
-    setFormaPagamento('pix')
+    setFormaPagamento('')
     setDataCompra(dataHoje())
     setVencimento('')
     setCompraEditando(null)
@@ -115,7 +115,7 @@ export default function Compra() {
     setErroFormulario('')
     setValidacaoFormularioAtiva(false)
     formularioBaseline.current = JSON.stringify({
-      linhas: [linhaInicial], fornecedor: '', pago: '1', formaPagamento: 'pix',
+      linhas: [linhaInicial], fornecedor: '', pago: '1', formaPagamento: '',
       dataCompra: dataHoje(), vencimento: '', motivoEdicao: '',
     })
   }
@@ -174,6 +174,7 @@ export default function Compra() {
       setErroFormulario('')
       setValidacaoFormularioAtiva(false)
       setCompraDetalhe(null)
+      setErroFormulario('')
       setFormAberto(true)
       if (location.hash !== '#compra-form') navigate('/compra#compra-form')
     } catch (error) {
@@ -462,7 +463,7 @@ export default function Compra() {
             ? <p className="purchase-status-badge">Não paga</p>
             : <Selecao rotulo="Situação do pagamento" id="compra.pago" valor={pago} onChange={(value) => {
               setPago(value)
-              setFormaPagamento(value === '1' ? 'pix' : 'pendente')
+              setFormaPagamento(value === '1' ? '' : 'pendente')
             }} opcoes={[['1', 'Pago'], ['0', 'Não pago']]} required />}
           {pago === '1'
             ? <Selecao rotulo="Forma de pagamento" id="compra.forma-pagamento" valor={formaPagamento}

@@ -96,7 +96,9 @@ export default function Receitas() {
   useEffect(() => { if (location.hash === '#receita-form') setFormAberto(true) }, [location.hash])
 
   const custos = useMemo(() => Object.fromEntries(insumos.map((i) => [i.id, i.custo_medio])), [insumos])
-  const opcoesInsumo = insumos.map((i) => [i.id, `${i.nome} (${i.unidade_base})`] as [string, string])
+  const opcoesInsumo = insumos
+    .filter((insumo) => insumo.tipo === 'ingrediente')
+    .map((i) => [i.id, `${i.nome} (${i.unidade_base})`] as [string, string])
   const receitaTemporaria: ReceitaRow = {
     id: editando ?? 'rascunho',
     nome: nome || 'Rascunho',

@@ -130,6 +130,11 @@ export async function salvarInsumo(
   }
   const t = agora()
   const nome = capitalizarNome(i.nome)
+  const [duplicado] = await db.query<{ id: string }>(
+    'SELECT id FROM insumo WHERE lower(nome)=lower(?) AND deleted_at IS NULL AND id<>?',
+    [nomeInformado, i.id ?? ''],
+  )
+  if (duplicado) throw new Error('Já existe um insumo com esse nome.')
   const atualizandoCusto = i.quantidade !== undefined || i.totalCents !== undefined
   const custoValido = Number.isFinite(i.quantidade) && Number(i.quantidade) > 0
     && Number.isInteger(i.totalCents) && Number(i.totalCents) > 0
@@ -290,6 +295,11 @@ export async function salvarReceita(
     throw new Error('Confira nome, rendimento, perda e ao menos um ingrediente')
   }
   const nome = capitalizarNome(r.nome)
+  const [duplicada] = await db.query<{ id: string }>(
+    'SELECT id FROM receita WHERE lower(nome)=lower(?) AND deleted_at IS NULL AND id<>?',
+    [r.nome.trim(), r.id ?? ''],
+  )
+  if (duplicada) throw new Error('Já existe uma receita com esse nome.')
   for (const item of r.itens) {
     if (!(Number.isFinite(item.quantidadeBase) && item.quantidadeBase > 0)
       || (!!item.insumoId === !!item.subreceitaId)) {
@@ -877,6 +887,11 @@ export async function salvarProduto(
     throw new Error('Confira nome, rendimento, peso e preço das variantes')
   }
   const nome = capitalizarNome(p.nome)
+  const [duplicado] = await db.query<{ id: string }>(
+    'SELECT id FROM produto WHERE lower(nome)=lower(?) AND deleted_at IS NULL AND id<>?',
+    [p.nome.trim(), p.id ?? ''],
+  )
+  if (duplicado) throw new Error('Já existe um produto com esse nome.')
   const [receita] = await db.query<{ rendimento_unidade: string }>(
     'SELECT rendimento_unidade FROM receita WHERE id=? AND deleted_at IS NULL', [p.receitaId],
   )

@@ -57,7 +57,9 @@ export const recipeBatchCost = (
       if (custo === undefined) throw new Error(`Insumo sem custo: ${it.insumoId}`)
       return sum + it.quantidadeBase * custo
     }, 0)
-    return ingredientes + (recipe.gasCents ?? 0) + laborCost(recipe.tempoMin ?? 0, valorHoraCents)
+    const tempo = recipe.tempoMin ?? 0
+    const gasProporcional = (tempo / 60) * (recipe.gasCents ?? 0)
+    return ingredientes + gasProporcional + laborCost(tempo, valorHoraCents)
   }
   if (!(Number.isFinite(valorHoraCents) && valorHoraCents >= 0)) throw new Error('Valor por hora inválido')
   return visit(r, new Set())

@@ -51,6 +51,7 @@ export default function Produtos() {
   const [acoesEstoqueAbertas, setAcoesEstoqueAbertas] = useState<string | null>(null)
   const [produtoPendente, setProdutoPendente] = useState<{ id: string; nome: string } | null>(null)
   const [movimentoPendente, setMovimentoPendente] = useState<{ variante: VarianteRow; perda: boolean } | null>(null)
+  const [varianteModalAberta, setVarianteModalAberta] = useState(false)
   const [quantidadeMovimento, setQuantidadeMovimento] = useState('')
   const [motivoMovimento, setMotivoMovimento] = useState('')
 
@@ -62,6 +63,28 @@ export default function Produtos() {
     void carregar().catch((e) => setErro(e instanceof Error ? e.message : String(e)))
   }, [carregar])
   useEffect(() => { if (location.hash === '#produto-form') setFormAberto(true) }, [location.hash])
+  useEffect(() => {
+    if (!base || !rec) return
+    const receitaSelecionada = base.receitas.find((item) => item.id === rec)
+    if (!receitaSelecionada) return
+    const margem = Number(base.config.margem_padrao || 40) / 100
+    const taxa = Number(base.config.taxa_pix || 0) / 100
+    setLinhas((atuais) => atuais.map((linha) => {
+      const unidades = receitaSelecionada.rendimento_unidade === 'g'
+        ? (linha.pesoG ?? 0) / 1000
+        : receitaSelecionada.rendimento_unidade === 'ml'
+          ? linha.volumeMl ?? 0
+          : linha.unidades
+      const custoReceita = custoPorUnidade(receitaSelecionada, base) * unidades
+      const custoEmb = [linha.embalagemInsumoId, linha.rotuloInsumoId].reduce((total, insumoId) =>
+        total + (base.insumos.find((insumo) => insumo.id === insumoId)?.custo_medio ?? 0), 0)
+      const custo = Math.round(custoReceita + custoEmb)
+      const novoPreco = custo > 0 && margem + taxa < 1
+        ? suggestedPrice({ custoUnitario: custo, margem, taxa })
+        : linha.precoCents
+      return novoPreco === linha.precoCents ? linha : { ...linha, precoCents: novoPreco }
+    }))
+  }, [base, rec])
   useModalAcessivel(Boolean(produtoPendente), () => setProdutoPendente(null), '#produto-confirmar-exclusao')
   useModalAcessivel(Boolean(movimentoPendente), () => setMovimentoPendente(null), '#produto-movimento-dialog')
   if (!base) return erro
@@ -177,6 +200,7 @@ export default function Produtos() {
     setEmbalagem(linha.embalagemInsumoId ?? '')
     setRotulo(linha.rotuloInsumoId ?? '')
     setPreco((linha.precoCents / 100).toFixed(2))
+    setVarianteModalAberta(true)
   }
 
   const salvar = async () => {
@@ -424,27 +448,51 @@ export default function Produtos() {
             </div>
           </div>
         ))}
-        <Campo rotulo="Nome da embalagem / variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote com 10 unidades" limite={200} minLength={1} required />
-        <div className="g">
-          {receita?.rendimento_unidade === 'g' && <Campo rotulo="Peso da receita no pacote (g)" id="produto.peso" valor={peso} onChange={setPeso} mascara="quantidade" />}
-          {receita?.rendimento_unidade === 'ml' && <Campo rotulo="Volume da receita no pacote (ml)" id="produto.volume" valor={volume} onChange={setVolume} mascara="quantidade" />}
-          <Campo rotulo="Preço de venda (R$)" id="produto.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
-        </div>
-        <div className="g">
-          <Selecao rotulo="Embalagem (opcional)" id="produto.insumo-embalagem" valor={embalagem} onChange={setEmbalagem} opcoes={opcoesInsumo(base, ['embalagem'])} />
-          <Selecao rotulo="Rótulo (opcional)" id="produto.insumo-rotulo" valor={rotulo} onChange={setRotulo} opcoes={opcoesInsumo(base, ['rotulo'])} />
-        </div>
-        {custoTotalPacote > 0 && <p className="cost-hint">Custo estimado: {formatBRL(custoTotalPacote)} · preço sugerido: {formatBRL(sugerido)}</p>}
-        {sugerido > 0 && <button className="bt o" type="button" onClick={() => setPreco((sugerido / 100).toFixed(2))} data-testid="produto.usar-sugerido">Usar preço sugerido</button>}
-        <button className="bt o" type="button" onClick={adicionar}
-          disabled={!vn.trim() || vn.trim().length > 200 || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
-          {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
-        </button>
+        <button className="bt o" type="button" onClick={() => {
+          setEditandoLinha(null)
+          setVn('')
+          setUn('1')
+          setPeso('')
+          setVolume('')
+          setEmbalagem('')
+          setRotulo('')
+          setPreco('')
+          setVarianteModalAberta(true)
+        }}>Adicionar variante</button>
         <button className="bt" disabled={!nome.trim() || nome.trim().length > 200 || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
           {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
         </button>
         {editando && <button className="bt o" onClick={limpar}>Cancelar</button>}
       </section></div>}
+      {varianteModalAberta && <div className="alert-overlay" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setVarianteModalAberta(false)
+      }}>
+        <section className="alert-dialog" role="dialog" aria-modal="true" aria-labelledby="produto-variante-title" tabIndex={-1}>
+          <FecharModal onClick={() => setVarianteModalAberta(false)} />
+          <h2 id="produto-variante-title">{editandoLinha == null ? 'Nova variante' : 'Editar variante'}</h2>
+          <Campo rotulo="Nome da variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote com 10 unidades" limite={200} minLength={1} required />
+          <div className="g">
+            {receita?.rendimento_unidade === 'g' && <Campo rotulo="Peso da receita no pacote (g)" id="produto.peso" valor={peso} onChange={setPeso} mascara="quantidade" />}
+            {receita?.rendimento_unidade === 'ml' && <Campo rotulo="Volume da receita no pacote (ml)" id="produto.volume" valor={volume} onChange={setVolume} mascara="quantidade" />}
+            <Campo rotulo="Preço de venda (R$)" id="produto.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
+          </div>
+          <div className="g">
+            <Selecao rotulo="Embalagem (opcional)" id="produto.insumo-embalagem" valor={embalagem} onChange={setEmbalagem} opcoes={opcoesInsumo(base, ['embalagem'])} />
+            <Selecao rotulo="Rótulo (opcional)" id="produto.insumo-rotulo" valor={rotulo} onChange={setRotulo} opcoes={opcoesInsumo(base, ['rotulo'])} />
+          </div>
+          {custoTotalPacote > 0 && <p className="cost-hint">Custo estimado: {formatBRL(custoTotalPacote)} · preço sugerido: {formatBRL(sugerido)}</p>}
+          {sugerido > 0 && <button className="bt o" type="button" onClick={() => setPreco((sugerido / 100).toFixed(2))}>Usar preço sugerido</button>}
+          <div className="alert-actions">
+            <button className="bt o" type="button" onClick={() => setVarianteModalAberta(false)}>Cancelar</button>
+            <button className="bt" type="button" onClick={() => {
+              adicionar()
+              setVarianteModalAberta(false)
+            }} disabled={!vn.trim() || vn.trim().length > 200 || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
+              {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
+            </button>
+          </div>
+        </section>
+      </div>}
     </>
   )
 }

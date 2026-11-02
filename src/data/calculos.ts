@@ -39,7 +39,7 @@ export function custoPorUnidade(r: ReceitaRow, b: Base): number {
     const gas = b.config.gas_lote_cents !== undefined
       ? Number(b.config.gas_lote_cents)
       : Number(b.config.gas_lote ?? 0) * 100
-    if (!Number.isFinite(gas) || gas < 0) throw new Error('Custo de gás por lote inválido')
+    if (!Number.isFinite(gas) || gas < 0) throw new Error('Custo de gás por hora inválido')
     return {
       id: recipe.id, nome: recipe.nome, rendimentoQtd: recipe.rendimento_qtd,
       perdaPct: recipe.perda_pct, itens: children, tempoMin: recipe.tempo_min ?? 0,

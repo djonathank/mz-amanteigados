@@ -6,7 +6,7 @@ import { Campo, MensagemModal } from './ui'
 
 const CAMPOS: [string, string, string, 'dinheiro' | 'percentual'][] = [
   ['hora_trabalho', 'Valor da hora trabalhada (R$)', '20', 'dinheiro'],
-  ['gas_lote', 'Gás e energia por receita (R$)', '3.5', 'dinheiro'],
+  ['gas_lote', 'Gás e energia por hora (R$)', '3.5', 'dinheiro'],
   ['taxa_pix', 'Taxa do Pix (%)', '0', 'percentual'],
   ['taxa_cartao_credito', 'Taxa de cartão de crédito (%)', '3.5', 'percentual'],
   ['taxa_cartao_debito', 'Taxa de cartão de débito (%)', '3.5', 'percentual'],

@@ -140,7 +140,15 @@ export default function Insumos() {
     setMovimentos([])
     void carregarMovimentos()
   }, [movimentos, carregarMovimentos])
-  useEffect(() => { if (location.hash === '#insumo-form') setFormAberto(true) }, [location.hash])
+  useEffect(() => {
+    if (location.hash === '#insumo-form') {
+      if (!editando) {
+        setTipo('')
+        setUnidade('')
+      }
+      setFormAberto(true)
+    }
+  }, [location.hash, editando])
   useEffect(() => {
     if (formAberto && !editando) focarCampo('insumo.nome')
   }, [formAberto, editando])
