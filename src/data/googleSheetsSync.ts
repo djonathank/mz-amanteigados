@@ -1,4 +1,5 @@
 import type { Db } from './db'
+import { obterIdDispositivo } from './deviceId'
 
 export const SYNC_TABLES = [
   'insumo', 'fornecedor', 'cliente', 'receita', 'receita_item', 'produto', 'produto_variante',
@@ -69,6 +70,7 @@ export async function sincronizarPlanilha(
   aplicarDados: (operation: () => Promise<void>) => Promise<void>,
   origem: 'mesclar' | 'planilha' = 'mesclar',
 ): Promise<SyncProgress> {
+  await aplicarIdDispositivo(db)
   const current = await obterPlanilha(token, spreadsheet.spreadsheetId)
   await garantirAbas(token, db, current)
   const schema = await carregarSchema(db)
@@ -105,9 +107,22 @@ export async function sincronizarPlanilha(
         }
         return parsed
       })
-    const local = origem === 'mesclar' ? await db.query<SyncRow>(`SELECT * FROM ${table}`) : []
+    let local = origem === 'mesclar' ? await db.query<SyncRow>(`SELECT * FROM ${table}`) : []
+    local = local.map((row) => ({ ...row, device_id: String(row.device_id ?? obterIdDispositivo()) }))
     merged[table] = selecionarLinhasSincronizadas(table, local, remote, origem)
     recordCount += merged[table].length
+  }
+
+  async function aplicarIdDispositivo(db: Db): Promise<void> {
+    const deviceId = obterIdDispositivo()
+    await db.transaction(async () => {
+      for (const table of SYNC_TABLES) {
+        const columns = await db.query<{ name: string }>(`PRAGMA table_info(${table})`)
+        if (columns.some((column) => column.name === 'device_id')) {
+          await db.run(`UPDATE ${table} SET device_id=? WHERE device_id IS NULL OR TRIM(device_id)=''`, [deviceId])
+        }
+      }
+    })
   }
 
   reconstruirSaldosSincronizados(merged)

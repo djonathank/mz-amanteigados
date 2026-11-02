@@ -21,6 +21,8 @@ export default function MenuUsuario() {
   const [avatar, setAvatar] = useState(carregarAvatar)
   const [salvandoAvatar, setSalvandoAvatar] = useState(false)
   const [confirmarReconexao, setConfirmarReconexao] = useState(false)
+  const [backupPendente, setBackupPendente] = useState<{ texto: string; total: number } | null>(null)
+  const [confirmarLimpeza, setConfirmarLimpeza] = useState(false)
   const seletorImagem = useRef<HTMLInputElement>(null)
   const seletorBackup = useRef<HTMLInputElement>(null)
   const nomeOriginal = useRef('')
@@ -193,8 +195,28 @@ export default function MenuUsuario() {
       const texto = await arquivo.text()
       const preview = await validarBackup(db, texto)
       if (!preview.valido) throw new Error(preview.erros.join(' '))
-      await importarBackup(db, texto)
-      setMensagem(`Backup restaurado com ${preview.totalRegistros} registros.`)
+      setBackupPendente({ texto, total: preview.totalRegistros })
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const confirmarRestauracao = async () => {
+    if (!backupPendente) return
+    try {
+      await importarBackup(db, backupPendente.texto)
+      setMensagem(`Backup restaurado com ${backupPendente.total} registros.`)
+      setBackupPendente(null)
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const limparDadosLocais = async () => {
+    try {
+      await db.clearData()
+      setMensagem('Dados locais apagados. Conecte a conta Google para restaurar a planilha.')
+      setConfirmarLimpeza(false)
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
@@ -315,6 +337,7 @@ export default function MenuUsuario() {
         <div className="g">
           <button className="bt o" type="button" onClick={() => void exportarBackup()}>Exportar backup</button>
           <button className="bt o" type="button" onClick={() => seletorBackup.current?.click()}>Restaurar backup</button>
+          <button className="bt d" type="button" onClick={() => setConfirmarLimpeza(true)}>Apagar dados locais</button>
         </div>
       </section>
       {confirmarReconexao && <ConfirmacaoAcao
@@ -324,6 +347,22 @@ export default function MenuUsuario() {
         confirmar="Baixar dados"
         onCancelar={() => setConfirmarReconexao(false)}
         onConfirmar={() => void reconectar()}
+      />}
+      {backupPendente && <ConfirmacaoAcao
+        id="backup-confirmar-restauracao"
+        titulo="Restaurar backup e substituir dados?"
+        mensagem={`Este arquivo contém ${backupPendente.total} registros. Todos os dados locais atuais serão substituídos e não poderão ser recuperados por esta ação.`}
+        confirmar="Restaurar backup"
+        onCancelar={() => setBackupPendente(null)}
+        onConfirmar={() => void confirmarRestauracao()}
+      />}
+      {confirmarLimpeza && <ConfirmacaoAcao
+        id="dados-confirmar-limpeza"
+        titulo="Apagar todos os dados locais?"
+        mensagem="Esta ação remove permanentemente os dados deste aparelho. Exporte um backup antes de continuar."
+        confirmar="Apagar dados"
+        onCancelar={() => setConfirmarLimpeza(false)}
+        onConfirmar={() => void limparDadosLocais()}
       />}
       <MensagemModal tipo="sucesso" mensagem={!erro && !google.erro ? mensagem : ''} onFechar={() => setMensagem('')} />
       <MensagemModal tipo="erro" mensagem={erro || (google.erro === erroGoogleFechado ? '' : google.erro)}

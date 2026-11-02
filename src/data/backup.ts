@@ -45,6 +45,11 @@ export async function validarBackup(db: Db, texto: string): Promise<BackupPrevie
   const dados = root.dados as Record<string, unknown>
   const erros: string[] = []
   let totalRegistros = 0
+  for (const table of SYNC_TABLES) {
+    if (!Object.prototype.hasOwnProperty.call(dados, table)) {
+      erros.push(`Tabela obrigatória ausente: "${table}".`)
+    }
+  }
   for (const [table, rows] of Object.entries(dados)) {
     if (!SYNC_TABLES.includes(table as SyncTable)) {
       erros.push(`Tabela desconhecida: "${table}".`)

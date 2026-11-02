@@ -314,7 +314,6 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     sessao.current = null
     setEstado(estadoVazio)
-    await db.clearData()
   }, [db])
 
   const sincronizarAgora = useCallback(async () => {

@@ -53,7 +53,7 @@ O arquivo fica em `android/app/build/outputs/apk/debug/app-debug.apk`. Esse APK 
 | Produtos e variantes | Variações por unidades, peso em g ou volume em ml, embalagem, rótulo e preço; edição por variante |
 | Precificação | Preço sugerido por produto/variante e simulador de aumento de custo dos insumos |
 | Venda e comprovante | Carrinho, Pix/dinheiro/cartão/fiado, comprovante compartilhável e PDF local |
-| Estoque e produção (Fase 2) | Saldo e mínimo de insumos/variantes, movimentos de compra, ajuste, perda, venda e produção; lotes, validade, custo médio ponderado, baixa FEFO e lista de compras por encomendas |
+| Estoque e produção (Fase 2) | Saldo e mínimo de insumos/variantes, movimentos de compra, ajuste, perda, venda e produção; custo médio ponderado e lista de compras por encomendas |
 | Operação (Fase 3) | Clientes, fornecedores, encomendas com sinal e status, entrega integrada à venda, contas a pagar/receber e lançamentos manuais |
 | Relatórios (Fase 4) | Vendas e lucro por período, produtos mais rentáveis, melhores clientes, histórico de custo e exportação CSV/PDF |
 | Primeiro acesso e persistência | Login Google obrigatório, SQLite com migrações aditivas e sem dados demonstrativos |

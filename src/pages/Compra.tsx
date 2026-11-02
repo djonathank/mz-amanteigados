@@ -568,7 +568,8 @@ export default function Compra() {
           <h2 id="cancelar-compra-title">Cancelar compra?</h2>
           <p>A compra será mantida no histórico como cancelada. O sistema tentará conciliar estoque, custo médio e financeiro; saldos negativos impedem o cancelamento.</p>
           <label className="fl"><small>Motivo do cancelamento (obrigatório)</small>
-            <input value={motivoCancelamento} onChange={(event) => setMotivoCancelamento(event.target.value)} />
+            <label htmlFor="compra-motivo-cancelamento">Motivo do cancelamento</label>
+            <input id="compra-motivo-cancelamento" value={motivoCancelamento} onChange={(event) => setMotivoCancelamento(event.target.value)} />
           </label>
           <div className="alert-actions">
             <button className="bt o" type="button" disabled={salvando} onClick={() => setCompraCancelamento(null)}>Cancelar</button>

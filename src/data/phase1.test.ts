@@ -161,9 +161,10 @@ describe('backup preview validation', () => {
     expect(f.calls).toHaveLength(0)
   })
 
-  it('accepts legacy V1 backups with omitted empty tables', async () => {
+  it('rejects backups with omitted required tables', async () => {
     const f = fakeDb()
     const preview = await validarBackup(f.db, JSON.stringify({ schema_version: 1, dados: {} }))
-    expect(preview).toMatchObject({ valido: true, totalRegistros: 0, erros: [] })
+    expect(preview.valido).toBe(false)
+    expect(preview.erros.join(' ')).toContain('Tabela obrigatória ausente')
   })
 })

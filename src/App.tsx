@@ -1,27 +1,29 @@
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { DbProvider, useDb } from './data/DbContext'
 import { GoogleSyncProvider } from './data/GoogleSyncContext'
 import { lerConfig } from './data/repos'
-import Comprovante from './pages/Comprovante'
-import Compra from './pages/Compra'
-import Custos from './pages/Custos'
-import Categorias from './pages/Categorias'
-import Insumos from './pages/Insumos'
+import { subscribeDatabaseChanges } from './data/db'
 import Inicio from './pages/Inicio'
 import Mais from './pages/Mais'
-import Precificacao from './pages/Precificacao'
-import Produtos from './pages/Produtos'
-import Receitas from './pages/Receitas'
 import { Icon } from './pages/ui'
-import Vender from './pages/Vender'
 import Login from './pages/Login'
 import MenuUsuario from './pages/MenuUsuario'
-import Relatorios from './pages/Relatorios'
-import Gestao from './pages/Gestao'
 import AppLoading from './AppLoading'
+
+const Comprovante = lazy(() => import('./pages/Comprovante'))
+const Compra = lazy(() => import('./pages/Compra'))
+const Custos = lazy(() => import('./pages/Custos'))
+const Categorias = lazy(() => import('./pages/Categorias'))
+const Insumos = lazy(() => import('./pages/Insumos'))
+const Precificacao = lazy(() => import('./pages/Precificacao'))
+const Produtos = lazy(() => import('./pages/Produtos'))
+const Receitas = lazy(() => import('./pages/Receitas'))
+const Vender = lazy(() => import('./pages/Vender'))
+const Relatorios = lazy(() => import('./pages/Relatorios'))
+const Gestao = lazy(() => import('./pages/Gestao'))
 
 const tabs = [
   ['/', 'Início', 'home'],
@@ -173,14 +175,20 @@ function Rotas() {
 
   useEffect(() => {
     let ativo = true
-    setPerfil(null)
-    void lerConfig(db).then((config) => {
+    const carregarPerfil = () => {
+      void lerConfig(db).then((config) => {
       if (ativo) setPerfil(config.nome_usuario?.trim() ?? '')
-    }).catch(() => {
+      }).catch(() => {
       if (ativo) setPerfil('')
-    })
-    return () => { ativo = false }
-  }, [db, location.pathname])
+      })
+    }
+    carregarPerfil()
+    const cancelar = subscribeDatabaseChanges(carregarPerfil)
+    return () => {
+      ativo = false
+      cancelar()
+    }
+  }, [db])
 
   if (perfil === null) return <AppLoading />
   const precisaConfigurarPerfil = !perfil || loginForcado
@@ -190,6 +198,7 @@ function Rotas() {
   return (
     <div className={`phone${precisaConfigurarPerfil ? ' first-access-shell' : ''}${location.pathname === '/mais' ? ' more-shell' : ''}`}>
       <main>
+        <Suspense fallback={<AppLoading />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/primeiro-acesso" element={<Navigate to="/login" replace />} />
@@ -212,7 +221,9 @@ function Rotas() {
           <Route path="/compra" element={<Compra />} />
           <Route path="/custos" element={<Custos />} />
           <Route path="/categorias" element={<Categorias />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </main>
       {!precisaConfigurarPerfil && <Navegacao />}
     </div>

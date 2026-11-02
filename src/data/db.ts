@@ -12,6 +12,7 @@ import supplierAddress from './migrations/014_supplier_address.sql?raw'
 import financialCategories from './migrations/016_financial_categories.sql?raw'
 import categoryAdditionalColors from './migrations/017_category_additional_colors.sql?raw'
 import ledgerDescription from './migrations/018_ledger_description.sql?raw'
+import performanceIndexes from './migrations/019_performance_indexes.sql?raw'
 
 const NOME = 'mzgestao'
 const sqlite = new SQLiteConnection(CapacitorSQLite)
@@ -235,6 +236,11 @@ async function abrir(): Promise<Db> {
   const feita18 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 18')
   if (!feita18.values?.length) {
     await conn.run('INSERT INTO _migracoes (versao) VALUES (18)', [], false)
+  }
+  const feita19 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 19')
+  if (!feita19.values?.length) {
+    await executarSqlIndividual(conn, performanceIndexes)
+    await conn.run('INSERT INTO _migracoes (versao) VALUES (19)', [], false)
   }
   let emTransacao = false
   const persistir = async () => { /* Spreadsheet is the persistent store. */ }
