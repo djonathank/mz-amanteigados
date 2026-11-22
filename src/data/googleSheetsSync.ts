@@ -70,7 +70,7 @@ export async function sincronizarPlanilha(
   aplicarDados: (operation: () => Promise<void>) => Promise<void>,
   origem: 'mesclar' | 'planilha' = 'mesclar',
 ): Promise<SyncProgress> {
-  await aplicarIdDispositivo(db)
+  await aplicarDados(() => aplicarIdDispositivo(db))
   const current = await obterPlanilha(token, spreadsheet.spreadsheetId)
   await garantirAbas(token, db, current)
   const schema = await carregarSchema(db)

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Capacitor } from '@capacitor/core'
 import { Network } from '@capacitor/network'
 import { useDb } from './DbContext'
-import { withoutDatabaseChangeNotifications } from './db'
+import { withoutDatabaseChangeNotifications, subscribeDatabaseChanges } from './db'
 import { encontrarOuCriarPlanilha, encontrarPlanilhaExistente, obterPlanilha, sincronizarPlanilha } from './googleSheetsSync'
 
 const SCOPES = ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/drive.file']
@@ -157,13 +157,13 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
             ? await encontrarPlanilhaExistente(atual.accessToken)
             : await encontrarOuCriarPlanilha(atual.accessToken, db)
         if (!planilha) throw new Error('Não foi encontrada a planilha MZ Gestão - Dados nesta conta Google.')
-        const result = await withoutDatabaseChangeNotifications(() => sincronizarPlanilha(
+        const result = await sincronizarPlanilha(
           atual.accessToken,
           db,
           planilha,
-          (operation) => operation(),
+          (operation) => withoutDatabaseChangeNotifications(operation),
           options.origem ?? 'mesclar',
-        ))
+        )
         const sincronizadoEm = new Date().toISOString()
         setEstado({
           email: atual.email,
@@ -231,10 +231,17 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let ativo = true
+    let sincronizacaoAutomaticaEmCurso = false
+    let sincronizacaoPendente = false
     let removerListener: (() => Promise<void>) | undefined
     const tentarSincronizar = () => {
       const atual = sessao.current
-      if (!atual || sincronizacaoAtual.current) return
+      if (!atual) return
+      if (sincronizacaoAutomaticaEmCurso || sincronizacaoAtual.current) {
+        sincronizacaoPendente = true
+        return
+      }
+      sincronizacaoAutomaticaEmCurso = true
       void (async () => {
         const conectado = Capacitor.isNativePlatform()
           ? (await Network.getStatus()).connected
@@ -244,9 +251,16 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
         ...value,
         sincronizando: false,
         erro: error instanceof Error ? error.message : String(error),
-      })))
+      }))).finally(() => {
+        sincronizacaoAutomaticaEmCurso = false
+        if (sincronizacaoPendente && ativo) {
+          sincronizacaoPendente = false
+          tentarSincronizar()
+        }
+      })
     }
-    const timer = window.setInterval(tentarSincronizar, 60_000)
+    const unsubscribe = subscribeDatabaseChanges(tentarSincronizar)
+    const timer = window.setInterval(tentarSincronizar, 180_000)
     const onOnline = () => tentarSincronizar()
     const onVisible = () => {
       if (document.visibilityState === 'visible') tentarSincronizar()
@@ -272,6 +286,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     return () => {
       ativo = false
+      unsubscribe()
       window.clearInterval(timer)
       window.removeEventListener('online', onOnline)
       document.removeEventListener('visibilitychange', onVisible)
