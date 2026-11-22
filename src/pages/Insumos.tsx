@@ -731,7 +731,9 @@ export default function Insumos() {
         </div>
         {unidade === 'un' && !quantidadeUnitariaValida && <p className="notice error" role="alert">Para unidades, informe uma quantidade inteira.</p>}
         <Campo rotulo="Valor total (R$)" id="insumo.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
-        {(unidade === 'kg' || unidade === 'l') && <p className="helper">O estoque é controlado na unidade base ({baseOf(unidade)}); quantidade e valor informados permanecem na unidade selecionada.</p>}
+        {/* {(unidade === 'kg' || unidade === 'l') && 
+        <p className="helper">O estoque é controlado na unidade base ({baseOf(unidade)}); quantidade e valor informados permanecem na unidade selecionada.</p>}
+        */}
         <Campo rotulo={`Estoque mínimo${unidade ? ` (${unidade})` : ''}`} id="insumo.estoque-minimo"
           valor={estoqueMinimo} onChange={(value) => setEstoqueMinimo(filtrarNumeroSemMascara(value, false))}
           inputMode="numeric" limite={10} placeholder="0" />
