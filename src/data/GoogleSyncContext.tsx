@@ -260,7 +260,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
       })
     }
     const unsubscribe = subscribeDatabaseChanges(tentarSincronizar)
-    const timer = window.setInterval(tentarSincronizar, 180_000)
+    const timer = window.setInterval(tentarSincronizar, 100_000)
     const onOnline = () => tentarSincronizar()
     const onVisible = () => {
       if (document.visibilityState === 'visible') tentarSincronizar()
