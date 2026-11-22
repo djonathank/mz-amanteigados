@@ -78,7 +78,7 @@ export async function listarMovimentos(
   if (tipoMovimento) { filtrosExternos.push('m.tipo=?'); params.push(tipoMovimento) }
   params.push(TAMANHO_PAGINA_MOVIMENTOS + 1, offset)
   const rows = await db.query<{
-    id: string; item_tipo: string; item_id: string; item_nome: string; unidade: string; tipo: string
+    id: string; item_tipo: string; item_id: string; item_nome: string; unidade: string; fator: number; tipo: string
     quantidade: number; saldo_resultante: number; custo_unit: number | null; data: string; motivo: string | null
   }>(
     `WITH historico AS (
@@ -90,7 +90,8 @@ export async function listarMovimentos(
        FROM movimento_estoque m WHERE m.deleted_at IS NULL
      )
      SELECT m.id, m.item_tipo, m.item_id, COALESCE(i.nome, p.nome || ' · ' || v.nome) AS item_nome,
-            COALESCE(i.unidade_base, 'pacotes') AS unidade, m.tipo, m.quantidade, m.saldo_resultante,
+            COALESCE(i.unidade_compra, 'pacotes') AS unidade,
+            COALESCE(i.fator_compra, 1) AS fator, m.tipo, m.quantidade, m.saldo_resultante,
             m.custo_unit, m.data, m.motivo
      FROM historico m
      LEFT JOIN insumo i ON m.item_tipo='insumo' AND i.id=m.item_id
@@ -101,7 +102,11 @@ export async function listarMovimentos(
     params,
   )
   return {
-    items: rows.slice(0, TAMANHO_PAGINA_MOVIMENTOS),
+    items: rows.slice(0, TAMANHO_PAGINA_MOVIMENTOS).map((row) => ({
+      ...row,
+      quantidade: row.quantidade / (Number(row.fator) || 1),
+      saldo_resultante: row.saldo_resultante / (Number(row.fator) || 1),
+    })),
     hasMore: rows.length > TAMANHO_PAGINA_MOVIMENTOS,
   }
 }

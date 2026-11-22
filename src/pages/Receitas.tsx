@@ -266,6 +266,7 @@ export default function Receitas() {
   }
 
   useModalAcessivel(Boolean(receitaPendente), () => setReceitaPendente(null), '#receita-confirmar-exclusao')
+  useModalAcessivel(formAberto, limpar, '#receita-form')
 
   return (
     <>

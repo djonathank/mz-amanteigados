@@ -299,6 +299,9 @@ export default function Gestao({ tela }: Props) {
   }, estoquePendente ? '#gestao-estoque-motivo'
     : motivoCancelamentoPendente ? '#gestao-motivo-cancelamento'
     : exclusaoPendente ? '#gestao-confirmar-exclusao' : '#gestao-confirmar-cancelamento')
+  useModalAcessivel(formAberto && tela === 'clientes', reset, '#clientes-form')
+  useModalAcessivel(formAberto && tela === 'fornecedores', reset, '#fornecedores-form')
+  useModalAcessivel(formAberto && tela === 'financeiro', reset, '#financeiro-form')
 
   return (
     <>

@@ -87,6 +87,8 @@ export default function Produtos() {
   }, [base, rec])
   useModalAcessivel(Boolean(produtoPendente), () => setProdutoPendente(null), '#produto-confirmar-exclusao')
   useModalAcessivel(Boolean(movimentoPendente), () => setMovimentoPendente(null), '#produto-movimento-dialog')
+  useModalAcessivel(varianteModalAberta, () => setVarianteModalAberta(false), '#produto-variante-dialog')
+  useModalAcessivel(formAberto, limpar, '#produto-form')
   if (!base) return erro
     ? <p className="notice error" role="alert">{erro}</p>
     : <p className="notice" role="status">Carregando produtos...</p>
@@ -109,7 +111,7 @@ export default function Produtos() {
     ? suggestedPrice({ custoUnitario: custoTotalPacote, margem, taxa })
     : 0
 
-  const limpar = () => {
+  function limpar() {
     setFormAberto(false)
     if (location.hash === '#produto-form') navigate(`${location.pathname}${location.search}`, { replace: true })
     setNome('')
@@ -467,7 +469,7 @@ export default function Produtos() {
       {varianteModalAberta && <div className="alert-overlay" onMouseDown={(event) => {
         if (event.target === event.currentTarget) setVarianteModalAberta(false)
       }}>
-        <section className="alert-dialog" role="dialog" aria-modal="true" aria-labelledby="produto-variante-title" tabIndex={-1}>
+        <section id="produto-variante-dialog" className="alert-dialog" role="dialog" aria-modal="true" aria-labelledby="produto-variante-title" tabIndex={-1}>
           <FecharModal onClick={() => setVarianteModalAberta(false)} />
           <h2 id="produto-variante-title">{editandoLinha == null ? 'Nova variante' : 'Editar variante'}</h2>
           <Campo rotulo="Nome da variante" id="produto.variante" valor={vn} onChange={setVn} placeholder="Ex.: Pacote com 10 unidades" limite={200} minLength={1} required />
