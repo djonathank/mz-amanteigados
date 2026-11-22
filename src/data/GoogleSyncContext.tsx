@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { Capacitor } from '@capacitor/core'
 import { Network } from '@capacitor/network'
 import { useDb } from './DbContext'
-import { withoutDatabaseChangeNotifications, subscribeDatabaseChanges } from './db'
+import { withoutDatabaseChangeNotifications } from './db'
 import { encontrarOuCriarPlanilha, encontrarPlanilhaExistente, obterPlanilha, sincronizarPlanilha } from './googleSheetsSync'
 
 const SCOPES = ['openid', 'email', 'profile', 'https://www.googleapis.com/auth/drive.file']
@@ -85,7 +85,12 @@ async function autenticarGoogle(): Promise<Sessao> {
   await inicializarGoogle()
   if (Capacitor.isNativePlatform()) {
     const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
-    const user = await GoogleAuth.signIn()
+    let user
+    try {
+      user = await GoogleAuth.signIn()
+    } catch (error) {
+      throw traduzirErroLoginNativo(error)
+    }
     if (!user.email || !user.authentication.accessToken) {
       throw new Error('O Google não retornou o e-mail e a autorização necessários para sincronizar.')
     }
@@ -108,6 +113,25 @@ async function autenticarGoogle(): Promise<Sessao> {
     accessToken: token.access_token,
     accessTokenExpiresAt: Date.now() + token.expires_in * 1000,
   }
+}
+
+function traduzirErroLoginNativo(error: unknown): Error {
+  if (!error || typeof error !== 'object') {
+    return new Error(error instanceof Error ? error.message : String(error))
+  }
+
+  const detalhe = error as { code?: unknown; status?: unknown; statusCode?: unknown; message?: unknown }
+  const codigo = String(detalhe.code ?? detalhe.statusCode ?? detalhe.status ?? '')
+  if (codigo === '10' || codigo === 'DEVELOPER_ERROR') {
+    return new Error(
+      'O Google recusou a configuração deste app (erro 10). Confira no Google Cloud o package br.com.mzbolachas.gestao e o SHA-1 da chave que assinou este APK (debug ou release). Depois gere e instale um APK novo.',
+    )
+  }
+  if (codigo === '7' || codigo === 'NETWORK_ERROR') {
+    return new Error('Não foi possível conectar ao Google. Verifique a internet e tente novamente.')
+  }
+  const mensagem = typeof detalhe.message === 'string' ? detalhe.message : 'Falha ao entrar com o Google.'
+  return codigo ? new Error(`${mensagem} (código ${codigo})`) : new Error(mensagem)
 }
 
 export function GoogleSyncProvider({ children }: { children: ReactNode }) {
@@ -133,13 +157,13 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
             ? await encontrarPlanilhaExistente(atual.accessToken)
             : await encontrarOuCriarPlanilha(atual.accessToken, db)
         if (!planilha) throw new Error('Não foi encontrada a planilha MZ Gestão - Dados nesta conta Google.')
-        const result = await sincronizarPlanilha(
+        const result = await withoutDatabaseChangeNotifications(() => sincronizarPlanilha(
           atual.accessToken,
           db,
           planilha,
-          (operation) => withoutDatabaseChangeNotifications(operation),
+          (operation) => operation(),
           options.origem ?? 'mesclar',
-        )
+        ))
         const sincronizadoEm = new Date().toISOString()
         setEstado({
           email: atual.email,
@@ -206,35 +230,32 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
   }, [db, renovarESincronizar])
 
   useEffect(() => {
-    let timer = 0
     let ativo = true
     let removerListener: (() => Promise<void>) | undefined
-    const scheduleSync = () => {
-      if (!sessao.current) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => {
-        if (sincronizacaoAtual.current) {
-          void sincronizacaoAtual.current.then(scheduleSync, scheduleSync)
-          return
-        }
-        const atual = sessao.current
-        if (atual) void renovarESincronizar(atual).catch((error) => setEstado((value) => ({
-          ...value,
-          sincronizando: false,
-          erro: error instanceof Error ? error.message : String(error),
-        })))
-      }, 1500)
+    const tentarSincronizar = () => {
+      const atual = sessao.current
+      if (!atual || sincronizacaoAtual.current) return
+      void (async () => {
+        const conectado = Capacitor.isNativePlatform()
+          ? (await Network.getStatus()).connected
+          : navigator.onLine
+        if (conectado && ativo && !sincronizacaoAtual.current) await renovarESincronizar(atual)
+      })().catch((error) => setEstado((value) => ({
+        ...value,
+        sincronizando: false,
+        erro: error instanceof Error ? error.message : String(error),
+      })))
     }
-    const unsubscribe = subscribeDatabaseChanges(scheduleSync)
-    const onOnline = () => scheduleSync()
+    const timer = window.setInterval(tentarSincronizar, 60_000)
+    const onOnline = () => tentarSincronizar()
     const onVisible = () => {
-      if (document.visibilityState === 'visible') scheduleSync()
+      if (document.visibilityState === 'visible') tentarSincronizar()
     }
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
     if (Capacitor.isNativePlatform()) {
       void Network.addListener('networkStatusChange', (status) => {
-        if (status.connected) scheduleSync()
+        if (status.connected) tentarSincronizar()
       }).then((listener) => {
         if (ativo) removerListener = () => listener.remove()
         else void listener.remove()
@@ -243,7 +264,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
         erro: `Não foi possível monitorar a conexão de rede: ${error instanceof Error ? error.message : String(error)}`,
       })))
       void Network.getStatus().then((status) => {
-        if (ativo && status.connected) scheduleSync()
+        if (ativo && status.connected) tentarSincronizar()
       }).catch((error: unknown) => setEstado((value) => ({
         ...value,
         erro: `Não foi possível verificar a conexão de rede: ${error instanceof Error ? error.message : String(error)}`,
@@ -251,8 +272,7 @@ export function GoogleSyncProvider({ children }: { children: ReactNode }) {
     }
     return () => {
       ativo = false
-      window.clearTimeout(timer)
-      unsubscribe()
+      window.clearInterval(timer)
       window.removeEventListener('online', onOnline)
       document.removeEventListener('visibilitychange', onVisible)
       if (removerListener) void removerListener()
