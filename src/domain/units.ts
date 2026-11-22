@@ -1,8 +1,8 @@
-export type BaseUnit = 'g' | 'ml' | 'un'
+export type BaseUnit = 'g' | 'kg' | 'ml' | 'l' | 'un'
 export type Unit = 'g' | 'kg' | 'ml' | 'l' | 'un'
 
 const FACTORS: Record<Unit, [BaseUnit, number]> = {
-  g: ['g', 1], kg: ['g', 1000], ml: ['ml', 1], l: ['ml', 1000], un: ['un', 1],
+  g: ['g', 1], kg: ['kg', 1], ml: ['ml', 1], l: ['l', 1], un: ['un', 1],
 }
 
 export const baseOf = (u: Unit): BaseUnit => FACTORS[u][0]

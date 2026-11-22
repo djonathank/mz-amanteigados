@@ -203,10 +203,11 @@ export default function Insumos() {
     const precoSalvo = ((insumo.custo_medio * toBase(Number(qtdSalva), insumo.unidade_compra as Unit)) / 100).toFixed(2)
     setQtd(qtdSalva)
     setPreco(precoSalvo)
-    setEstoqueMinimo(String(Number(insumo.estoque_minimo ?? 0)))
+    setEstoqueMinimo(String(Number(insumo.estoque_minimo ?? 0) / Number(insumo.fator_compra || 1)))
     setCustoInicial({ qtd: qtdSalva, preco: precoSalvo })
     baselineFormulario.current = JSON.stringify([
-      insumo.nome, insumo.tipo, insumo.unidade_compra, qtdSalva, precoSalvo, String(Number(insumo.estoque_minimo ?? 0)),
+      insumo.nome, insumo.tipo, insumo.unidade_compra, qtdSalva, precoSalvo,
+      String(Number(insumo.estoque_minimo ?? 0) / Number(insumo.fator_compra || 1)),
     ])
     setConfirmacao('')
     setErro('')
@@ -235,7 +236,7 @@ export default function Insumos() {
         unidade,
         quantidade: semAlterarCusto || !qtd.trim() ? undefined : Number(qtd),
         totalCents: semAlterarCusto || !preco.trim() ? undefined : Math.round(Number(preco) * 100),
-        estoqueMinimo: minimo,
+        estoqueMinimo: toBase(minimo, unidade),
       })
       limpar()
       setConfirmacao(atualizando ? 'Insumo atualizado.' : 'Insumo salvo.')
@@ -267,16 +268,17 @@ export default function Insumos() {
   }
 
   const abrirMovimento = (insumo: InsumoRow, modo: 'movimento' | 'saldo' | 'minimo') => {
+    const fator = Number(insumo.fator_compra || 1)
     setAcoesAbertasId(null)
     setMovimentoAberto({ insumo, modo })
-    setValorMovimento(modo === 'saldo' ? String(Number(insumo.estoque_atual ?? 0)) : '')
+    setValorMovimento(modo === 'saldo' ? String(Number(insumo.estoque_atual ?? 0) / fator) : '')
     setMotivoMovimento('')
     setOperacaoMovimento('ajuste')
-    setValorMinimo(String(Number(insumo.estoque_minimo ?? 0)))
+    setValorMinimo(String(Number(insumo.estoque_minimo ?? 0) / fator))
     setErroMovimento('')
     baselineMovimento.current = JSON.stringify([
-      modo === 'saldo' ? String(Number(insumo.estoque_atual ?? 0)) : '',
-      '', 'ajuste', String(Number(insumo.estoque_minimo ?? 0)),
+      modo === 'saldo' ? String(Number(insumo.estoque_atual ?? 0) / fator) : '',
+      '', 'ajuste', String(Number(insumo.estoque_minimo ?? 0) / fator),
     ])
   }
 
@@ -297,7 +299,9 @@ export default function Insumos() {
   }
 
   const quantidadeMovimento = valorMovimento.trim() ? Number(valorMovimento.replace(',', '.')) : Number.NaN
-  const saldoAtualMovimento = Number(movimentoAberto?.insumo.estoque_atual ?? 0)
+  const fatorMovimento = Number(movimentoAberto?.insumo.fator_compra || 1)
+  const unidadeMovimento = movimentoAberto?.insumo.unidade_compra || movimentoAberto?.insumo.unidade_base || ''
+  const saldoAtualMovimento = Number(movimentoAberto?.insumo.estoque_atual ?? 0) / fatorMovimento
   const saldoProjetado = movimentoAberto?.modo === 'saldo'
     ? quantidadeMovimento
     : saldoAtualMovimento + quantidadeMovimento
@@ -342,7 +346,7 @@ export default function Insumos() {
       }
       setSalvandoMovimento(true)
       try {
-        await definirEstoqueMinimoInsumo(db, insumo.id, minimo)
+        await definirEstoqueMinimoInsumo(db, insumo.id, minimo * Number(insumo.fator_compra || 1))
         setMovimentoAberto(null)
         setConfirmacao('Estoque mínimo atualizado.')
       } catch (error) {
@@ -360,14 +364,15 @@ export default function Insumos() {
       return
     }
     const valorInformado = Number(valorMovimento.replace(',', '.'))
-    const saldoAtual = Number(insumo.estoque_atual ?? 0)
+    const saldoAtual = Number(insumo.estoque_atual ?? 0) / Number(insumo.fator_compra || 1)
     if (!Number.isInteger(valorInformado) || (modo === 'saldo' ? valorInformado < 0 : valorInformado === 0)) {
       setErroMovimento(modo === 'saldo'
         ? 'Informe um saldo contado inteiro válido, zero ou maior.'
         : 'Informe uma quantidade inteira diferente de zero.')
       return
     }
-    const quantidade = modo === 'saldo' ? valorInformado - saldoAtual : valorInformado
+    const quantidade = (modo === 'saldo' ? valorInformado - saldoAtual : valorInformado)
+      * Number(insumo.fator_compra || 1)
     if (quantidade === 0) {
       setErroMovimento('O saldo contado é igual ao saldo atual.')
       return
@@ -493,10 +498,10 @@ export default function Insumos() {
           <FecharModal onClick={fecharMovimento} />
           <span className="alert-icon"><Icon name={movimentoAberto.modo === 'minimo' ? 'settings' : movimentoAberto.modo === 'saldo' ? 'stock' : 'add'} size={26} /></span>
           <h2 id="movimento-title">{movimentoAberto.modo === 'minimo' ? 'Ajustar estoque mínimo' : movimentoAberto.modo === 'saldo' ? 'Registrar inventário' : 'Adicionar ou remover quantidade'}</h2>
-          <p><b>{movimentoAberto.insumo.nome}</b><br />Saldo atual: {formatQuantity(saldoAtualMovimento)} {movimentoAberto.insumo.unidade_base}</p>
+          <p><b>{movimentoAberto.insumo.nome}</b><br />Saldo atual: {formatQuantity(saldoAtualMovimento)} {unidadeMovimento}</p>
           {movimentoAberto.modo === 'minimo' ? <>
             <label className="stock-modal-field">
-              <span>Estoque mínimo ({movimentoAberto.insumo.unidade_base})</span>
+              <span>Estoque mínimo ({unidadeMovimento})</span>
               <input autoFocus type="text" inputMode="numeric" value={valorMinimo}
                 onFocus={(event) => event.currentTarget.select()} onChange={(event) => {
                   setValorMinimo(filtrarNumeroSemMascara(event.target.value, false))
@@ -514,7 +519,7 @@ export default function Insumos() {
             />}
             <label className="stock-modal-field">
               <span>{movimentoAberto.modo === 'saldo'
-                ? `Saldo contado (${movimentoAberto.insumo.unidade_base})`
+                ? `Saldo contado (${unidadeMovimento})`
                 : 'Quantidade (positivo para entrada, negativo para saída)'}</span>
               <input autoFocus type="text" inputMode="numeric" value={valorMovimento}
                 onFocus={(event) => event.currentTarget.select()} onChange={(event) => {
@@ -531,13 +536,13 @@ export default function Insumos() {
               Diferença em relação ao saldo atual:{' '}
               <b className={Number.isFinite(diferencaInventario) && diferencaInventario < 0 ? 'negative' : 'positive'}>
                 {Number.isFinite(diferencaInventario)
-                  ? `${diferencaInventario > 0 ? '+' : ''}${formatQuantity(diferencaInventario)} ${movimentoAberto.insumo.unidade_base}`
+                  ? `${diferencaInventario > 0 ? '+' : ''}${formatQuantity(diferencaInventario)} ${unidadeMovimento}`
                   : '—'}
               </b>
             </p>}
             <p id="estoque-saldo-previsto" className={`stock-balance-preview${saldoProjetado < 0 ? ' error' : ''}`} aria-live="polite">
               {movimentoAberto.modo === 'saldo' ? 'Saldo após inventário' : 'Saldo após movimentação'}:{' '}
-              <b>{Number.isFinite(saldoProjetado) ? `${formatQuantity(saldoProjetado)} ${movimentoAberto.insumo.unidade_base}` : '—'}</b>
+              <b>{Number.isFinite(saldoProjetado) ? `${formatQuantity(saldoProjetado)} ${unidadeMovimento}` : '—'}</b>
             </p>
             {valorMovimento.trim() && ajudaValidacaoMovimento && <p id="estoque-movimento-validacao" className="notice error" role="alert">{ajudaValidacaoMovimento}</p>}
             <label className="stock-modal-field">
@@ -628,7 +633,7 @@ export default function Insumos() {
               <span className="stock-row-name" title={insumo.nome}>{insumo.nome}</span>
               <small>Tipo: {TIPOS.find(([tipo]) => tipo === insumo.tipo)?.[1] ?? insumo.tipo}</small>
               <small>Valor cadastrado: {formatBRLUnitario(insumo.custo_medio * toBase(1, insumo.unidade_compra as Unit))} por {insumo.unidade_compra}</small>
-              <small>Saldo: {formatQuantity(Number(insumo.estoque_atual ?? 0) / Number(insumo.fator_compra || 1))} {insumo.unidade_compra} · Mínimo: {formatQuantity(Number(insumo.estoque_minimo ?? 0))} {insumo.unidade_base}</small>
+              <small>Saldo: {formatQuantity(Number(insumo.estoque_atual ?? 0) / Number(insumo.fator_compra || 1))} {insumo.unidade_compra} · Mínimo: {formatQuantity(Number(insumo.estoque_minimo ?? 0) / Number(insumo.fator_compra || 1))} {insumo.unidade_compra}</small>
             </div>
             <div className="stock-primary-actions">
               <button className="lk icon-action" aria-label={`Editar ${insumo.nome}`} title="Editar" onClick={() => editar(insumo)}><Icon name="edit" /></button>
@@ -711,7 +716,7 @@ export default function Insumos() {
         {unidade === 'un' && !quantidadeUnitariaValida && <p className="notice error" role="alert">Para unidades, informe uma quantidade inteira.</p>}
         <Campo rotulo="Valor total (R$)" id="insumo.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
         {(unidade === 'kg' || unidade === 'l') && <p className="helper">O estoque é controlado na unidade base ({baseOf(unidade)}); quantidade e valor informados permanecem na unidade selecionada.</p>}
-        <Campo rotulo={`Estoque mínimo${unidade ? ` (${baseOf(unidade)})` : ''}`} id="insumo.estoque-minimo"
+        <Campo rotulo={`Estoque mínimo${unidade ? ` (${unidade})` : ''}`} id="insumo.estoque-minimo"
           valor={estoqueMinimo} onChange={(value) => setEstoqueMinimo(filtrarNumeroSemMascara(value, false))}
           inputMode="numeric" limite={10} placeholder="0" />
         {!minimoValido && <p className="notice error" role="alert">O estoque mínimo deve ser um número inteiro igual ou maior que zero.</p>}
