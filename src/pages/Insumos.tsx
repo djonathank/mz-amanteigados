@@ -229,7 +229,8 @@ export default function Insumos() {
     && qtd === custoInicial.qtd && preco === custoInicial.preco
   const dadosCustoValidos = semAlterarCusto || (Number(qtd) > 0 && Number(preco) > 0)
   const minimo = Number(estoqueMinimo)
-  const minimoValido = estoqueMinimo.trim() !== '' && Number.isInteger(minimo) && minimo >= 0
+  const minimoValido = estoqueMinimo.trim() !== '' && Number.isFinite(minimo) && minimo >= 0
+    && (unidade !== 'un' || Number.isInteger(minimo))
   const quantidadeUnitariaValida = unidade !== 'un' || !qtd.trim() || Number.isInteger(Number(qtd))
   const nomeValido = nome.trim().length >= 2 && nome.trim().length <= 60
   const valido = nomeValido && !!tipo && !!unidade && dadosCustoValidos && minimoValido && quantidadeUnitariaValida
@@ -316,12 +317,14 @@ export default function Insumos() {
     ? quantidadeMovimento
     : saldoAtualMovimento + quantidadeMovimento
   const diferencaInventario = quantidadeMovimento - saldoAtualMovimento
-  const quantidadeInteiraValida = Number.isInteger(quantidadeMovimento)
+  const quantidadeValida = Number.isFinite(quantidadeMovimento)
+    && (unidadeMovimento !== 'un' || Number.isInteger(quantidadeMovimento))
   const minimoMovimento = valorMinimo.trim() ? Number(valorMinimo.replace(',', '.')) : Number.NaN
-  const minimoInteiroValido = Number.isInteger(minimoMovimento)
+  const minimoValidoMovimento = Number.isFinite(minimoMovimento)
+    && (unidadeMovimento !== 'un' || Number.isInteger(minimoMovimento))
   const validadeMovimento = movimentoAberto?.modo === 'minimo'
-    ? Number.isFinite(minimoMovimento) && minimoMovimento >= 0 && minimoInteiroValido
-    : Number.isFinite(quantidadeMovimento) && quantidadeInteiraValida
+    ? minimoValidoMovimento && minimoMovimento >= 0
+    : quantidadeValida
       && (movimentoAberto?.modo === 'saldo' || quantidadeMovimento !== 0)
       && (movimentoAberto?.modo !== 'movimento' || operacaoMovimento !== 'perda' || quantidadeMovimento < 0)
       && (movimentoAberto?.modo !== 'movimento' || operacaoMovimento !== 'consumo' || quantidadeMovimento < 0)
@@ -331,10 +334,10 @@ export default function Insumos() {
   const ajudaValidacaoMovimento = movimentoAberto?.modo === 'minimo'
     ? !Number.isFinite(minimoMovimento) || minimoMovimento < 0
       ? 'Informe um mínimo igual ou maior que zero.'
-      : !minimoInteiroValido ? 'O estoque mínimo deve ser um número inteiro.' : ''
+      : unidadeMovimento === 'un' && !Number.isInteger(minimoMovimento) ? 'O estoque mínimo deve ser um número inteiro para unidades.' : ''
     : !Number.isFinite(quantidadeMovimento)
       ? 'Informe uma quantidade válida.'
-      : !quantidadeInteiraValida ? 'Informe uma quantidade inteira.'
+      : unidadeMovimento === 'un' && !Number.isInteger(quantidadeMovimento) ? 'Informe uma quantidade inteira para unidades.'
         : movimentoAberto?.modo === 'movimento' && quantidadeMovimento === 0
           ? 'Informe uma quantidade diferente de zero.'
         : movimentoAberto?.modo === 'movimento' && operacaoMovimento === 'perda' && quantidadeMovimento >= 0
@@ -350,8 +353,10 @@ export default function Insumos() {
     const { insumo, modo } = movimentoAberto
     if (modo === 'minimo') {
       const minimo = Number(valorMinimo.replace(',', '.'))
-      if (!Number.isInteger(minimo) || minimo < 0) {
-        setErroMovimento('Informe um estoque mínimo inteiro, zero ou maior.')
+      if (!Number.isFinite(minimo) || minimo < 0 || (unidadeMovimento === 'un' && !Number.isInteger(minimo))) {
+        setErroMovimento(unidadeMovimento === 'un'
+          ? 'Informe um estoque mínimo inteiro, zero ou maior.'
+          : 'Informe um estoque mínimo válido, zero ou maior.')
         return
       }
       setSalvandoMovimento(true)
@@ -376,10 +381,10 @@ export default function Insumos() {
     const valorInformado = Number(valorMovimento.replace(',', '.'))
     const fator = fatorEstoque(insumo)
     const saldoAtual = Number(insumo.estoque_atual ?? 0) / fator
-    if (!Number.isInteger(valorInformado) || (modo === 'saldo' ? valorInformado < 0 : valorInformado === 0)) {
+    if (!Number.isFinite(valorInformado) || (unidadeMovimento === 'un' && !Number.isInteger(valorInformado)) || (modo === 'saldo' ? valorInformado < 0 : valorInformado === 0)) {
       setErroMovimento(modo === 'saldo'
-        ? 'Informe um saldo contado inteiro válido, zero ou maior.'
-        : 'Informe uma quantidade inteira diferente de zero.')
+        ? (unidadeMovimento === 'un' ? 'Informe um saldo contado inteiro válido, zero ou maior.' : 'Informe um saldo contado válido, zero ou maior.')
+        : (unidadeMovimento === 'un' ? 'Informe uma quantidade inteira diferente de zero.' : 'Informe uma quantidade diferente de zero.'))
       return
     }
     const quantidade = (modo === 'saldo' ? valorInformado - saldoAtual : valorInformado)
@@ -513,9 +518,9 @@ export default function Insumos() {
           {movimentoAberto.modo === 'minimo' ? <>
             <label className="stock-modal-field">
               <span>Estoque mínimo ({unidadeMovimento})</span>
-              <input autoFocus type="text" inputMode="numeric" value={valorMinimo}
+              <input autoFocus type="text" inputMode={unidadeMovimento === 'un' ? 'numeric' : 'decimal'} value={valorMinimo}
                 onFocus={(event) => event.currentTarget.select()} onChange={(event) => {
-                  setValorMinimo(filtrarNumeroSemMascara(event.target.value, false))
+                  setValorMinimo(filtrarNumeroSemMascara(event.target.value, unidadeMovimento !== 'un'))
                   setErroMovimento('')
                 }} />
             </label>
@@ -532,11 +537,11 @@ export default function Insumos() {
               <span>{movimentoAberto.modo === 'saldo'
                 ? `Saldo contado (${unidadeMovimento})`
                 : 'Quantidade (positivo para entrada, negativo para saída)'}</span>
-              <input autoFocus type="text" inputMode="numeric" value={valorMovimento}
+              <input autoFocus type="text" inputMode={unidadeMovimento === 'un' ? 'numeric' : 'decimal'} value={valorMovimento}
                 onFocus={(event) => event.currentTarget.select()} onChange={(event) => {
                   setValorMovimento(filtrarEntradaNumerica(event.target.value, {
                     negativo: movimentoAberto.modo === 'movimento',
-                    decimal: false,
+                    decimal: unidadeMovimento !== 'un',
                   }))
                   setErroMovimento('')
                 }}
@@ -730,7 +735,7 @@ export default function Insumos() {
         <Campo rotulo={`Estoque mínimo${unidade ? ` (${unidade})` : ''}`} id="insumo.estoque-minimo"
           valor={estoqueMinimo} onChange={(value) => setEstoqueMinimo(filtrarNumeroSemMascara(value, false))}
           inputMode="numeric" limite={10} placeholder="0" />
-        {!minimoValido && <p className="notice error" role="alert">O estoque mínimo deve ser um número inteiro igual ou maior que zero.</p>}
+        {!minimoValido && <p className="notice error" role="alert">O estoque mínimo deve ser zero ou maior{unidade === 'un' ? ' e inteiro' : ''}.</p>}
         {/* <p className="helper">Informe um valor inteiro para receber o alerta de reposição. Novos insumos começam com estoque mínimo zero.</p> */}
         <div className="form-actions">
           <button className="bt o" type="button" disabled={salvando} onClick={fecharFormulario}>
