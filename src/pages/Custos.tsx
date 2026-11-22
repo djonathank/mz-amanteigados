@@ -30,8 +30,7 @@ export default function Custos() {
         const stored = config[key]
           ?? (key === 'gas_lote' ? legacy('gas_lote_cents')
             : key === 'hora_trabalho' ? legacy('valor_hora_cents') ?? legacy('hora_trabalho_cents')
-              : key === 'taxa_cartao_credito' || key === 'taxa_cartao_debito' ? config.taxa_cartao
-                : undefined)
+              : undefined)
         return [key, stored ?? fallback]
       }))
       setValores(defaults)
@@ -55,7 +54,7 @@ export default function Custos() {
     setSalvando(true)
     setErro('')
     try {
-      await salvarConfig(db, { ...valores, taxa_cartao: valores.taxa_cartao_credito })
+      await salvarConfig(db, valores)
       setConfirmacao('Custos salvos. A hora de trabalho entra no cálculo quando a receita tiver tempo de preparo.')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))

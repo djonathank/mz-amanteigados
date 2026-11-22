@@ -373,7 +373,7 @@ export const salvarConfig = (db: Db, c: Record<string, string>) => {
     if (!(Number.isFinite(hora) && hora >= 0 && hora <= 999999)) throw new Error('O valor da hora precisa ficar entre R$ 0,00 e R$ 999.999,00.')
     config.valor_hora_cents = String(Math.round(hora * 100))
   }
-  for (const key of ['taxa_pix', 'taxa_cartao', 'taxa_cartao_credito', 'taxa_cartao_debito', 'margem_padrao']) {
+  for (const key of ['taxa_pix', 'taxa_cartao_credito', 'taxa_cartao_debito', 'margem_padrao']) {
     if (c[key] === undefined) continue
     const percentual = Number(c[key])
     if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
@@ -978,7 +978,7 @@ export async function registrarVenda(
   antesDeConfirmar?: (vendaId: string, data: string) => Promise<void>,
 ): Promise<string> {
   const discount = v.descontoCents ?? 0
-  const formasValidas = ['pix', 'dinheiro', 'cartao', 'cartao_debito', 'cartao_credito']
+  const formasValidas = ['pix', 'dinheiro', 'cartao_debito', 'cartao_credito']
   if (!v.itens.length || v.itens.some((i) => !(i.quantidade > 0) || i.precoCents < 0 || i.custoCents < 0)
     || !Number.isInteger(discount) || discount < 0) {
     throw new Error('Adicione itens válidos à venda')
@@ -990,12 +990,12 @@ export async function registrarVenda(
   const subtotal = v.itens.reduce((s, i) => s + i.quantidade * i.precoCents, 0)
   if (discount > subtotal) throw new Error('O desconto não pode ser maior que o subtotal da venda.')
   const total = subtotal - discount
-  const pagamentoPendente = false
   const reason = v.motivoEstoqueNegativo?.trim() ?? ''
-  const pagamentoCartao = v.forma.startsWith('cartao') || v.forma === 'cartao'
-  const [configTax] = await db.query<{ valor: string }>('SELECT valor FROM config WHERE chave=?', [
-    pagamentoCartao ? 'taxa_cartao' : v.forma === 'pix' ? 'taxa_pix' : 'taxa_dinheiro',
-  ])
+  const pagamentoCartao = v.forma.startsWith('cartao')
+  const taxaChave = v.forma === 'cartao_credito' ? 'taxa_cartao_credito'
+    : v.forma === 'cartao_debito' ? 'taxa_cartao_debito'
+      : v.forma === 'pix' ? 'taxa_pix' : 'taxa_dinheiro'
+  const [configTax] = await db.query<{ valor: string }>('SELECT valor FROM config WHERE chave=?', [taxaChave])
   const taxaPercentual = Math.max(0, Number(configTax?.valor ?? 0))
   await db.transaction(async () => {
     if (v.encomendaId) {
@@ -1007,7 +1007,7 @@ export async function registrarVenda(
     await db.run(
       `INSERT INTO venda (id, cliente_id, encomenda_id, data, desconto_cents, total_cents, forma_pagamento, status_pagamento, created_at, updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [id, v.clienteId ?? null, v.encomendaId ?? null, t, discount, total, v.forma, pagamentoPendente ? 'pendente' : 'pago', t, t],
+      [id, v.clienteId, v.encomendaId ?? null, t, discount, total, v.forma, 'pago', t, t],
     )
     for (const i of v.itens) {
       const [variant] = await db.query<{ estoque_atual: number }>(
@@ -1036,7 +1036,7 @@ export async function registrarVenda(
          (id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, origem_tipo, origem_id, created_at, updated_at)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [novoId(), 'receita', 'Venda', total, t, t,
-          pagamentoPendente ? 0 : 1, 1, 'venda', id, t, t],
+          1, 1, 'venda', id, t, t],
       )
     }
     if (taxaPercentual > 0 && (v.forma === 'pix' || pagamentoCartao)) {

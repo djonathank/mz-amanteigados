@@ -2183,7 +2183,7 @@ a.bt {
   width: 28px;
   height: 28px;
   margin: 0 auto 7px;
-  place-items: center;
+  /* place-items: center; */
   border-radius: 50%;
   background: var(--br-linear-gradient);
   color: var(--br);

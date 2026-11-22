@@ -1,4 +1,4 @@
-# MZ Gestão — Documentação Técnica
+﻿# MZ Gestão — Documentação Técnica
 
 **Produto:** aplicativo híbrido de gestão para a MZ Bolachas da Maquiele
 **Plataformas:** Android, iOS e web (um único código)
@@ -143,7 +143,7 @@ lote_saida(id, lote_id, variante_id, quantidade_pacotes)
 
 -- Vendas e encomendas
 venda(id, cliente_id, encomenda_id, data, desconto_cents, total_cents,
-  forma_pagamento,                -- pix | dinheiro | cartao | fiado
+  forma_pagamento,                -- pix | dinheiro | cartao_debito | cartao_credito
   status_pagamento,               -- pago | pendente
   tabela_preco_id)                -- Fase 5
 venda_item(id, venda_id, variante_id, lote_id, quantidade,
@@ -219,10 +219,9 @@ margem_real    = lucro_rs / preco_final
 - Alertas destacam saldo ≤ mínimo e lotes vencidos ou com validade nos próximos sete dias. Mínimos são configuráveis para insumos e variantes.
 - Venda baixa o estoque da variante, alocando lotes pela validade mais próxima (FEFO) e preserva o `lote_id`; custo unitário de produção é congelado no item da venda.
 
-### 5.5 Vendas e fiado
+### 5.5 Vendas
 
-- Formas de pagamento: Pix, dinheiro, cartão, fiado.
-- Pagamento "pendente" (fiado) exige cliente e cria uma conta a receber no financeiro; marcar a conta como paga atualiza o status da venda.
+- Formas de pagamento: Pix, dinheiro, cartão de débito e cartão de crédito. Todas as vendas exigem cliente e são registradas como pagas.
 - Desconto informado em valor fixo, limitado ao subtotal. O lucro reportado desconta esse valor uma única vez.
 
 ### 5.6 Encomendas
@@ -238,7 +237,6 @@ Máquina de estados: `pedido → produzindo → pronto → entregue` (e `cancela
 | Evento | Lançamento |
 |---|---|
 | Venda paga | Entrada |
-| Venda no fiado | Conta a receber |
 | Sinal de encomenda | Entrada parcial |
 | Compra de insumo paga | Saída financeira registrada automaticamente |
 | Compra a prazo | Conta a pagar; quitar também atualiza o estado da compra |
@@ -383,7 +381,7 @@ A planilha criada no Drive da conta do usuário é acessada diretamente pelas AP
 ### 11.1 Pirâmide
 
 1. **Unitários (Vitest):** domínio de unidades, custo, preço, margem, transição de encomendas, exportação CSV, compatibilidade de cabeçalhos Sheets e operações de estoque com banco fake. Os valores da seção 5.3 são testes de ouro.
-2. **Integração com SQLite real (pendente):** compra/custo médio, produção transacional, venda FEFO e fiado ainda precisam de testes que abram SQLite em memória; os testes atuais de operações usam um `Db` fake.
+2. **Integração com SQLite real (pendente):** compra/custo médio, produção transacional e venda FEFO ainda precisam de testes que abram SQLite em memória; os testes atuais de operações usam um `Db` fake.
 3. **Componentes (Testing Library) e E2E (Playwright/Appium):** ainda não configurados.
 4. **Sincronização:** há testes unitários para merge por `updated_at`, empate de `device_id` e compatibilidade de cabeçalho antigo; chamadas reais/fake à API, erro 429, expiração de token e concorrência entre aparelhos ainda requerem testes.
 
@@ -424,7 +422,7 @@ Todo elemento interativo recebe `data-testid` e rótulo de acessibilidade no for
 | Insumos, receitas, sub-receitas, perda, produtos e variantes | Implementado; peso e volume têm colunas separadas. A migração 003 preenche `volume_ml` para receitas líquidas existentes. |
 | Custo por unidade e preço sugerido | Implementado, incluindo ingredientes, perda, gás, mão de obra, embalagem e rótulo. Custos fracionários de centavo são mantidos até o custo final do pacote. |
 | Compra e impacto da alta de insumo | Implementado: saldo e custo médio ponderado são atualizados, com histórico de custo; o simulador recalcula preços. |
-| Venda, pagamentos, comprovante e PDF | Implementado: associação opcional de cliente, fiado vinculado a cliente, desconto fixo, baixa de estoque FEFO, custo congelado e comprovante. |
+| Venda, pagamentos, comprovante e PDF | Implementado: cliente obrigatório, pagamentos à vista, desconto fixo, baixa de estoque FEFO, custo congelado e comprovante. |
 | Backup JSON e restauração | Exportação e restauração pela tela de conta; o arquivo é validado e pré-visualizado antes da confirmação que substitui os dados locais. |
 | Seed demonstrativo | Criado somente quando todas as tabelas estão vazias; os registros incluem “(exemplo)” no nome. O aviso no painel está comentado e não é exibido. |
 | Primeiro acesso e nome do usuário | Implementado: é possível continuar somente no aparelho e conectar Google depois; o nome permanece editável no perfil. |
@@ -448,7 +446,7 @@ Todo elemento interativo recebe `data-testid` e rótulo de acessibilidade no for
 | Clientes e fornecedores | Cadastro, edição e remoção/anonimização de dados pessoais; fornecedores são vinculáveis a compras. |
 | Encomendas | Cadastro com itens, data, sinal, observações e estados pedido → produzindo → pronto → entregue/cancelado; edição antes da conclusão. |
 | Entrega e venda | A entrega de pedido pronto registra venda e baixa de estoque, preserva o sinal já pago e substitui somente o saldo pendente. |
-| Financeiro | Receitas/despesas manuais, entradas de venda/sinal, contas a receber do fiado, contas a pagar de compra e baixa de pagamento com atualização do documento de origem. |
+| Financeiro | Receitas/despesas manuais, entradas de venda/sinal, contas a pagar de compra e baixa de pagamento com atualização do documento de origem. |
 | Limitações | O financeiro não oferece pagamento parcial; edição de lançamentos automáticos não é permitida. |
 
 ### Fase 4 — relatórios e sincronização
@@ -511,3 +509,4 @@ Todo elemento interativo recebe `data-testid` e rótulo de acessibilidade no for
 - **1.1:** sincronização definida como espelho em Google Sheets (banco local continua sendo a fonte de dados do aparelho); atualizadas as seções 2, 3, 4, 6, 8, 9, 11, 12 e 14.
 - **1.2:** registrada a auditoria da Fase 1, a distinção entre custo da V1 e estoque da Fase 2, e a coluna de volume para variantes líquidas.
 - **2.0:** documentadas as Fases 2–4 implementadas, custo médio e movimentos de estoque, operações de clientes/encomendas/financeiro, relatórios e reconstrução de saldos no sync; registrado o texto padrão `Selecione` dos dropdowns.
+

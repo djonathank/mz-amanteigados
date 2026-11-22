@@ -56,15 +56,22 @@ export default function Precificacao() {
     return () => { ativo = false }
   }, [db, search])
 
-  const taxa = formaPagamento === 'cartao_credito'
-    ? Number(base?.config.taxa_cartao_credito ?? base?.config.taxa_cartao ?? 3.5)
+  const taxaCartao = formaPagamento === 'cartao_credito'
+    ? base?.config.taxa_cartao_credito
     : formaPagamento === 'cartao_debito'
-      ? Number(base?.config.taxa_cartao_debito ?? base?.config.taxa_cartao ?? 3.5)
+      ? base?.config.taxa_cartao_debito
+      : undefined
+  const taxa = formaPagamento === 'cartao_credito' || formaPagamento === 'cartao_debito'
+    ? taxaCartao === undefined ? Number.NaN : Number(taxaCartao)
       : formaPagamento === 'pix' ? Number(base?.config.taxa_pix ?? 0) : 0
+  const rotuloTaxaCartaoCredito = base?.config.taxa_cartao_credito === undefined
+    ? 'Não configurada' : `${Number(base.config.taxa_cartao_credito)}%`
+  const rotuloTaxaCartaoDebito = base?.config.taxa_cartao_debito === undefined
+    ? 'Não configurada' : `${Number(base.config.taxa_cartao_debito)}%`
   const opcoesPagamento: [string, string][] = [
     ['pix', `Pix (${Number(base?.config.taxa_pix ?? 0)}%)`],
-    ['cartao_credito', `Cartão de crédito (${Number(base?.config.taxa_cartao_credito ?? base?.config.taxa_cartao ?? 3.5)}%)`],
-    ['cartao_debito', `Cartão de débito (${Number(base?.config.taxa_cartao_debito ?? base?.config.taxa_cartao ?? 3.5)}%)`],
+    ['cartao_credito', `Cartão de crédito (${rotuloTaxaCartaoCredito})`],
+    ['cartao_debito', `Cartão de débito (${rotuloTaxaCartaoDebito})`],
     ['dinheiro', 'Dinheiro (0%)'],
   ]
 

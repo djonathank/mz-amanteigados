@@ -69,7 +69,8 @@ describe('salvarInsumo', () => {
         gas_lote: '999999',
         hora_trabalho: '999999',
         taxa_pix: '100',
-        taxa_cartao: '100',
+        taxa_cartao_credito: '100',
+        taxa_cartao_debito: '100',
         margem_padrao: '100',
       })
       expect(f.calls.find((call) => call.params[0] === 'gas_lote_cents')?.params[1]).toBe('99999900')
