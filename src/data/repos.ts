@@ -167,8 +167,8 @@ export async function salvarInsumo(
     await db.transaction(async () => {
       if (fatorAnterior !== novoFator) {
         await db.run(
-          'UPDATE movimento_estoque SET quantidade=quantidade*?, saldo_resultante=saldo_resultante*?, updated_at=? WHERE item_tipo=? AND item_id=?',
-          [conversaoLegada, conversaoLegada, t, 'insumo', i.id],
+          'UPDATE movimento_estoque SET quantidade=quantidade*?, updated_at=? WHERE item_tipo=? AND item_id=?',
+          [conversaoLegada, t, 'insumo', i.id],
         )
       }
       const custoMedio = atualizandoCusto
