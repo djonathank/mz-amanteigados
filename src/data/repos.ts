@@ -142,8 +142,8 @@ export async function salvarInsumo(
     throw new Error('Informe quantidade e valor válidos para atualizar o custo.')
   }
   if (i.id) {
-    const [atual] = await db.query<{ unidade_base: BaseUnit; tipo: string }>(
-      'SELECT unidade_base, tipo FROM insumo WHERE id=? AND deleted_at IS NULL', [i.id],
+    const [atual] = await db.query<{ unidade_base: BaseUnit; unidade_compra: string; fator_compra: number; estoque_atual: number; estoque_minimo: number; tipo: string }>(
+      'SELECT unidade_base, unidade_compra, fator_compra, estoque_atual, estoque_minimo, tipo FROM insumo WHERE id=? AND deleted_at IS NULL', [i.id],
     )
     if (atual && atual.tipo !== (i.tipo ?? 'ingrediente')) throw new Error('O tipo e a unidade base do insumo não podem ser alterados durante a edição.')
     if (!atual) throw new Error('O insumo que você tentou editar não foi encontrado.')
@@ -159,21 +159,29 @@ export async function salvarInsumo(
         throw new Error('Não é possível alterar a unidade base enquanto o insumo estiver vinculado a receitas ou embalagens.')
       }
     }
-    if (atualizandoCusto) {
-      const values = [nome, i.tipo ?? 'ingrediente', baseOf(i.unidade), i.unidade, toBase(1, i.unidade),
-        costPerBase(Number(i.totalCents), Number(i.quantidade), i.unidade), t, i.id]
+    const novoFator = toBase(1, i.unidade)
+    const fatorAnterior = Number(atual.fator_compra || 1)
+    const conversaoLegada = fatorAnterior > 0 ? novoFator / fatorAnterior : 1
+    const estoqueAtual = Number(atual.estoque_atual || 0) * conversaoLegada
+    const estoqueMinimo = i.estoqueMinimo ?? Number(atual.estoque_minimo || 0) * conversaoLegada
+    await db.transaction(async () => {
+      if (fatorAnterior !== novoFator) {
+        await db.run(
+          'UPDATE movimento_estoque SET quantidade=quantidade*?, saldo_resultante=saldo_resultante*?, updated_at=? WHERE item_tipo=? AND item_id=?',
+          [conversaoLegada, conversaoLegada, t, 'insumo', i.id],
+        )
+      }
+      const custoMedio = atualizandoCusto
+        ? costPerBase(Number(i.totalCents), Number(i.quantidade), i.unidade)
+        : null
       await db.run(
-        `UPDATE insumo SET nome=?, tipo=?, unidade_base=?, unidade_compra=?, fator_compra=?, custo_medio=?,
-         estoque_minimo=COALESCE(?, estoque_minimo), updated_at=? WHERE id=? AND deleted_at IS NULL`,
-        [...values.slice(0, 6), i.estoqueMinimo ?? null, ...values.slice(6)],
+        `UPDATE insumo SET nome=?, tipo=?, unidade_base=?, unidade_compra=?, fator_compra=?,
+         custo_medio=COALESCE(?, custo_medio), estoque_atual=?, estoque_minimo=?, updated_at=?
+         WHERE id=? AND deleted_at IS NULL`,
+        [nome, i.tipo ?? 'ingrediente', baseOf(i.unidade), i.unidade, novoFator,
+          custoMedio, estoqueAtual, estoqueMinimo, t, i.id],
       )
-    } else {
-      await db.run(
-        `UPDATE insumo SET nome=?, tipo=?, estoque_minimo=COALESCE(?, estoque_minimo),
-         updated_at=? WHERE id=? AND deleted_at IS NULL`,
-        [nome, i.tipo ?? 'ingrediente', i.estoqueMinimo ?? null, t, i.id],
-      )
-    }
+    })
     return i.id
   }
   if (!custoValido) throw new Error('Informe nome, quantidade e valor válidos.')

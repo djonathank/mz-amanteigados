@@ -7,9 +7,9 @@ import { costPerBase, formatQuantity, toBase } from './units'
 import type { Receita } from './types'
 
 describe('unidades', () => {
-  it('converte para a unidade base', () => {
-    expect(toBase(2, 'kg')).toBe(2000)
-    expect(costPerBase(3800, 1, 'kg')).toBe(3.8)
+  it('mantém kg como unidade base cadastrada', () => {
+    expect(toBase(2, 'kg')).toBe(2)
+    expect(costPerBase(3800, 1, 'kg')).toBe(3800)
   })
 
   it('formats stock quantities consistently for Brazilian Portuguese', () => {
