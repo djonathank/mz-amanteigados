@@ -318,24 +318,30 @@ export default function Receitas() {
           <Campo rotulo="Perda ou quebra (%)" id="receita.perda" valor={perda} onChange={setPerda} mascara="percentual" maxDigitos={10} />
           <Campo rotulo="Tempo de preparo (min)" id="receita.tempo" valor={tempo} onChange={setTempo} mascara="inteiro" maxDigitos={10} />
         </div>
-        <div className="cd subcard">
-          <h3>Ingredientes</h3>
+        <div className="cd subcard ingredients-card">
+          <div className="ingredients-card-heading">
+            <div>
+              <h3>Ingredientes adicionados</h3>
+              <small>{linhas.length ? `${linhas.length} item${linhas.length === 1 ? '' : 's'} na receita` : 'Nenhum ingrediente adicionado'}</small>
+            </div>
+          </div>
           {/* {linhas.length === 0 && <p className="sb">Adicione os ingredientes necessários para calcular o custo.</p>} */}
           {linhas.map((linha, index) => (
-            <div className="r" key={`${linha.tipo}-${linha.id}-${index}`}>
-              <div>{nomeDe(linha)}<small>{linha.quantidadeBase} {linha.tipo === 'insumo' ? insumos.find((i) => i.id === linha.id)?.unidade_base : receitas.find((r) => r.id === linha.id)?.rendimento_unidade}</small></div>
-              <button className="lk" onClick={() => setLinhas((anteriores) => anteriores.filter((_, i) => i !== index))}>Remover</button>
+            <div className="r ingredient-row" key={`${linha.tipo}-${linha.id}-${index}`}>
+              <div className="ingredient-row-main"><b>{nomeDe(linha)}</b><small>{linha.quantidadeBase} {linha.tipo === 'insumo' ? insumos.find((i) => i.id === linha.id)?.unidade_base : receitas.find((r) => r.id === linha.id)?.rendimento_unidade}</small></div>
+              <button className="lk ingredient-remove" onClick={() => setLinhas((anteriores) => anteriores.filter((_, i) => i !== index))}>Remover</button>
             </div>
           ))}
-          <div className="g">
+          <div className="ingredient-add-panel">
+            <div className="ingredient-add-heading"><b>Adicionar ingrediente</b><small>Escolha o insumo e informe a quantidade</small></div>
             <div className="ingredient-selector">
               <Selecao rotulo="Ingrediente" id="receita.componente" valor={sel} onChange={(value) => { setSel(value); setQtd('') }} opcoes={opcoesInsumo} />
             </div>
-          </div>
-          <div className="g ingredient-controls">
-            <Campo rotulo={quantidadeItemLabel ? `Quantidade (${quantidadeItemLabel})` : 'Quantidade'} id="receita.quantidade"
-              valor={qtd} onChange={setQtd} mascara="quantidade" maxDigitos={10} disabled={!sel} />
-            <button className="bt o add-line" type="button" onClick={adicionar} disabled={!sel || !(Number(qtd) > 0)} data-testid="receita.adicionar-ingrediente"><Icon name="add" /> Adicionar </button>
+            <div className="ingredient-controls">
+              <Campo rotulo={quantidadeItemLabel ? `Quantidade (${quantidadeItemLabel})` : 'Quantidade'} id="receita.quantidade"
+                valor={qtd} onChange={setQtd} mascara="quantidade" maxDigitos={10} disabled={!sel} />
+              <button className="bt o add-line" type="button" onClick={adicionar} disabled={!sel || !(Number(qtd) > 0)} data-testid="receita.adicionar-ingrediente"><Icon name="add" /> Adicionar </button>
+            </div>
           </div>
         </div>
         {linhas.length > 0 && rendimentoUtil > 0 && !!unidade && perda.trim() !== '' && !erroCalculo && (

@@ -49,6 +49,7 @@ export default function Produtos() {
   const [formAberto, setFormAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [acoesEstoqueAbertas, setAcoesEstoqueAbertas] = useState<string | null>(null)
+  const [paginaVariante, setPaginaVariante] = useState(1)
   const [produtoPendente, setProdutoPendente] = useState<{ id: string; nome: string } | null>(null)
   const [movimentoPendente, setMovimentoPendente] = useState<{ variante: VarianteRow; perda: boolean } | null>(null)
   const [varianteModalAberta, setVarianteModalAberta] = useState(false)
@@ -87,6 +88,7 @@ export default function Produtos() {
   }, [base, rec])
   useModalAcessivel(Boolean(produtoPendente), () => setProdutoPendente(null), '#produto-confirmar-exclusao')
   useModalAcessivel(Boolean(movimentoPendente), () => setMovimentoPendente(null), '#produto-movimento-dialog')
+  useModalAcessivel(Boolean(acoesEstoqueAbertas), () => setAcoesEstoqueAbertas(null), '#produto-stock-picker')
   useModalAcessivel(varianteModalAberta, () => setVarianteModalAberta(false), '#produto-variante-dialog')
   useModalAcessivel(formAberto, limpar, '#produto-form')
   if (!base) return erro
@@ -236,6 +238,10 @@ export default function Produtos() {
     v.produto_id,
     { id: v.produto_id, nome: v.produto_nome, receitaId: v.receita_id, variantes: base.variantes.filter((item) => item.produto_id === v.produto_id) },
   ])).values())
+  const produtoAcoes = produtos.find((produto) => produto.id === acoesEstoqueAbertas)
+  const variantesFiltradas = produtoAcoes?.variantes ?? []
+  const totalPaginasVariantes = Math.max(1, Math.ceil(variantesFiltradas.length / 6))
+  const variantesPagina = variantesFiltradas.slice((paginaVariante - 1) * 6, paginaVariante * 6)
   const medidaValida = Boolean(receita) && (receita?.rendimento_unidade === 'g'
     ? Number(peso) > 0
     : receita?.rendimento_unidade === 'ml'
@@ -328,14 +334,14 @@ export default function Produtos() {
       <h1>Produtos à venda</h1>
       <p className="sb">Ligue cada receita às embalagens, rótulos e preços</p>
       <div className="cd">
-        <div className="section-heading"><h2>Seus produtos</h2><span className="pl">{produtos.length} cadastrados</span></div>
+        <div className="section-heading"><h2>Seus produtos</h2><span className="pl">{produtos.length} cadastrado(s)</span></div>
         {!produtos.length && <p className="notice">Nenhum produto cadastrado. Cadastre uma receita antes de criar produtos.</p>}
         {produtos.map((produto) => (
           <div className="product-row" key={produto.id}>
             <span className="ic" aria-hidden="true"><Icon name="box" /></span>
             <div className="product-row-content"><b className="product-name" title={produto.nome}>{produto.nome}</b>{produto.variantes.map((variant) => (
               <div className="variant-stock" key={variant.id}>
-                <small>{variant.nome} · {formatBRL(variant.preco_cents)} · saldo {variant.estoque_atual ?? 0}</small>
+                <small>{variant.nome} · {formatBRL(variant.preco_cents)} · Saldo {variant.estoque_atual ?? 0}</small>
               </div>
             ))}</div>
             <div className="product-row-actions">
@@ -343,25 +349,40 @@ export default function Produtos() {
             <button className="lk icon-action" aria-label={`Excluir ${produto.nome}`} onClick={() => setProdutoPendente({ id: produto.id, nome: produto.nome })}><Icon name="trash" /></button>
             <button className="lk icon-action product-stock-toggle" type="button" aria-label={`Mais ações de estoque para ${produto.nome}`} title="Ações de estoque"
               aria-expanded={acoesEstoqueAbertas === produto.id}
-              onClick={() => setAcoesEstoqueAbertas((aberta) => aberta === produto.id ? null : produto.id)}>
+              onClick={() => {
+                setPaginaVariante(1)
+                setAcoesEstoqueAbertas((aberta) => aberta === produto.id ? null : produto.id)
+              }}>
               <Icon name="add" />
             </button>
             </div>
-            {acoesEstoqueAbertas === produto.id && <div className="stock-extra-actions product-stock-extra-actions">
-              {produto.variantes.map((variant) => <div className="product-stock-action-group" key={variant.id}>
-                <button className="stock-extra-action" type="button" aria-label={`Ajustar estoque de ${variant.nome}`} onClick={() => abrirMovimento(variant)}>
-                  <span className="stock-extra-action-icon"><Icon name="stock" /></span>
-                  <span><b>Ajustar</b><small>Adicionar quantidade ao saldo</small></span>
-                </button>
-                <button className="stock-extra-action" type="button" aria-label={`Registrar perda de ${variant.nome}`} onClick={() => abrirMovimento(variant, true)}>
-                  <span className="stock-extra-action-icon"><Icon name="trash" /></span>
-                  <span><b>Registrar perda</b><small>Descontar quantidade perdida</small></span>
-                </button>
-              </div>)}
-            </div>}
           </div>
         ))}
       </div>
+      {produtoAcoes && <div className="alert-overlay" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) setAcoesEstoqueAbertas(null)
+      }}>
+        <section id="produto-stock-picker" className="alert-dialog product-stock-picker" role="dialog" aria-modal="true" aria-labelledby="produto-stock-picker-title" tabIndex={-1}>
+          <FecharModal onClick={() => setAcoesEstoqueAbertas(null)} />
+          <h2 id="produto-stock-picker-title">Ações de estoque</h2>
+          <p className="product-stock-picker-subtitle"><b>{produtoAcoes.nome}</b><br />Selecione a variante que deseja ajustar.</p>
+          <div className="product-stock-picker-list">
+            {variantesPagina.map((variant) => <div className="product-stock-picker-item" key={variant.id}>
+              <div><b>{variant.nome}</b><small>Saldo: {variant.estoque_atual ?? 0} pacote(s) · {formatBRL(variant.preco_cents)}</small></div>
+              <div className="product-stock-picker-actions">
+                <button className="bt o" type="button" onClick={() => abrirMovimento(variant)}>Ajustar</button>
+                <button className="bt danger-button" type="button" onClick={() => abrirMovimento(variant, true)}>Registrar perda</button>
+              </div>
+            </div>)}
+            {!variantesPagina.length && <p className="notice">Nenhuma variante encontrada.</p>}
+          </div>
+          {totalPaginasVariantes > 1 && <div className="product-stock-pagination">
+            <button className="lk" type="button" disabled={paginaVariante === 1} onClick={() => setPaginaVariante((pagina) => pagina - 1)}>Anterior</button>
+            <span>Página {paginaVariante} de {totalPaginasVariantes}</span>
+            <button className="lk" type="button" disabled={paginaVariante === totalPaginasVariantes} onClick={() => setPaginaVariante((pagina) => pagina + 1)}>Próxima</button>
+          </div>}
+        </section>
+      </div>}
       <AlertaConclusao mensagem={confirmacao} onConcluir={() => setConfirmacao('')} />
       {produtoPendente && <ConfirmacaoAcao
         id="produto-confirmar-exclusao"
@@ -431,40 +452,54 @@ export default function Produtos() {
             setRec(id)
           }} opcoes={base.receitas.map((r) => [r.id, `${r.nome} · ${r.rendimento_qtd} ${r.rendimento_unidade}`])} required />}
         {orientacao && <p className="notice" role="status">{orientacao}</p>}
-        {linhas.map((linha, index) => (
-          <div className="r" key={linha.id ?? `novo-${index}`}>
-            <div>{linha.nome}<small>{linha.pesoG ? `${linha.pesoG} g` : linha.volumeMl ? `${linha.volumeMl} ml` : `${linha.unidades} un`} · {formatBRL(linha.precoCents)}</small></div>
-            <div className="row-actions">
-              <button className="lk icon-action" aria-label={`Editar variante ${linha.nome}`} onClick={() => editarLinha(index)}><Icon name="edit" /></button>
-              <button className="lk icon-action" aria-label={`Remover variante ${linha.nome}`} onClick={() => {
-                setLinhas((anteriores) => anteriores.filter((_, i) => i !== index))
-                if (editandoLinha === index) {
-                  setEditandoLinha(null)
-                  setVn('')
-                  setPreco('')
-                  setPeso('')
-                  setVolume('')
-                }
-                else if (editandoLinha != null && editandoLinha > index) setEditandoLinha(editandoLinha - 1)
-              }}><Icon name="trash" /></button>
+        <div className="product-variants-block">
+          <div className="product-variants-heading">
+            <div>
+              <b>Variantes do produto</b>
+              <small>{linhas.length ? `${linhas.length} cadastrada${linhas.length === 1 ? '' : 's'}` : 'Nenhuma variante cadastrada'}</small>
             </div>
           </div>
-        ))}
-        <button className="bt o" type="button" onClick={() => {
-          setEditandoLinha(null)
-          setVn('')
-          setUn('1')
-          setPeso('')
-          setVolume('')
-          setEmbalagem('')
-          setRotulo('')
-          setPreco('')
-          setVarianteModalAberta(true)
-        }}>Adicionar variante</button>
-        <button className="bt" disabled={!nome.trim() || nome.trim().length > 200 || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
-          {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
-        </button>
-        {editando && <button className="bt o" onClick={limpar}>Cancelar</button>}
+          <div className="product-variants-list">
+            {linhas.map((linha, index) => (
+              <div className="r product-variant-row" key={linha.id ?? `novo-${index}`}>
+                <div className="product-variant-info"><b>{linha.nome}</b><small>{linha.pesoG ? `${linha.pesoG} g` : linha.volumeMl ? `${linha.volumeMl} ml` : `${linha.unidades} un`} · {formatBRL(linha.precoCents)}</small></div>
+                <div className="row-actions">
+                  <button className="lk icon-action" aria-label={`Editar variante ${linha.nome}`} onClick={() => editarLinha(index)}><Icon name="edit" /></button>
+                  <button className="lk icon-action" aria-label={`Remover variante ${linha.nome}`} onClick={() => {
+                    setLinhas((anteriores) => anteriores.filter((_, i) => i !== index))
+                    if (editandoLinha === index) {
+                      setEditandoLinha(null)
+                      setVn('')
+                      setPreco('')
+                      setPeso('')
+                      setVolume('')
+                    }
+                    else if (editandoLinha != null && editandoLinha > index) setEditandoLinha(editandoLinha - 1)
+                  }}><Icon name="trash" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="bt o product-add-variant" type="button" onClick={() => {
+            setEditandoLinha(null)
+            setVn('')
+            setUn('1')
+            setPeso('')
+            setVolume('')
+            setEmbalagem('')
+            setRotulo('')
+            setPreco('')
+            setVarianteModalAberta(true)
+          }}>Adicionar variante</button>
+        </div>
+        <div className="product-form-actions">
+          <div className="product-save-action">
+            {editando && <button className="bt o" type="button" onClick={limpar}>Cancelar</button>}
+            <button className="bt" type="button" disabled={!nome.trim() || nome.trim().length > 200 || !rec || linhas.length === 0 || salvando} data-testid="produto.salvar" onClick={salvar}>
+              {salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar'}
+            </button>
+          </div>
+        </div>
       </section></div>}
       {varianteModalAberta && <div className="alert-overlay" onMouseDown={(event) => {
         if (event.target === event.currentTarget) setVarianteModalAberta(false)

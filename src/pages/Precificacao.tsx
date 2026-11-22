@@ -182,13 +182,13 @@ export default function Precificacao() {
         <div className="cd">
           <h2>Produto para precificar</h2>
           <Selecao
-            rotulo="Produto e embalagem"
+            rotulo="Produto"
             id="preco.variante"
             valor={varianteId}
             onChange={(id) => { setVarianteId(id); setAviso('') }}
-            opcoes={[['manual', 'Informar custo da receita'], ...base.variantes.map((item) => [item.id, resumirNomeProduto(`${item.produto_nome} · ${item.nome}`)] as [string, string])]}
+            opcoes={[['manual', 'Informar custo da receita'], ...base.variantes.map((item) => [item.id, resumirNomeProduto(`${item.nome}`)])] as [string, string][]}
           />
-          {receita && <p className="helper">Receita: {receita.nome} · custo inclui ingredientes, tempo de preparo, gás, embalagem e rótulo.</p>}
+          {variante && <p className="helper">Produto: {variante.nome} · custo inclui ingredientes, tempo de preparo, gás, embalagem e rótulo.</p>}
         </div>
       )}
       <div className="hero">
