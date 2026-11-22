@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { DbProvider, useDb } from './data/DbContext'
-import { GoogleSyncProvider } from './data/GoogleSyncContext'
+import { GoogleSyncProvider, useGoogleSync } from './data/GoogleSyncContext'
 import { lerConfig } from './data/repos'
 import { subscribeDatabaseChanges } from './data/db'
 import Inicio from './pages/Inicio'
@@ -134,7 +134,9 @@ export default function App() {
 function Rotas() {
   const location = useLocation()
   const db = useDb()
+  // const google = useGoogleSync()
   const [perfil, setPerfil] = useState<string | null>(null)
+  // const [rotaSincronizada, setRotaSincronizada] = useState<string | null>(null)
   const loginForcado = Boolean(
     location.state
       && typeof location.state === 'object'
@@ -173,6 +175,23 @@ function Rotas() {
     window.scrollTo(0, 0)
   }, [location.pathname])
 
+  // useEffect(() => {
+  //   let ativo = true
+  //   const rota = location.pathname
+  //   if (!google.autenticacaoPronta || !google.email) {
+  //     setRotaSincronizada(rota)
+  //     return () => { ativo = false }
+  //   }
+
+  //   setRotaSincronizada(null)
+  //   void google.sincronizarAgora()
+  //     .catch(() => undefined)
+  //     .finally(() => {
+  //       if (ativo) setRotaSincronizada(rota)
+  //     })
+  //   return () => { ativo = false }
+  // }, [google.autenticacaoPronta, google.email, google.sincronizarAgora, location.pathname])
+
   useEffect(() => {
     let ativo = true
     const carregarPerfil = () => {
@@ -194,6 +213,7 @@ function Rotas() {
   const precisaConfigurarPerfil = !perfil || loginForcado
   if (precisaConfigurarPerfil && location.pathname !== '/login' && location.pathname !== '/primeiro-acesso') return <Navigate to="/login" replace />
   if (!precisaConfigurarPerfil && location.pathname === '/login' && !loginForcado) return <Navigate to="/" replace />
+  // if (rotaSincronizada !== location.pathname) return <AppLoading />
 
   return (
     <div className={`phone${precisaConfigurarPerfil ? ' first-access-shell' : ''}${location.pathname === '/mais' ? ' more-shell' : ''}`}>
