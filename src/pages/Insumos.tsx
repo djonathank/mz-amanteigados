@@ -260,7 +260,7 @@ export default function Insumos() {
       await carregarMovimentos()
       if (editando === insumo.id) limpar()
       setErro('')
-      setConfirmacao('Insumo excluído.')
+      setConfirmacao('Insumo removido. Os dados foram preservados.')
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
     }
@@ -559,9 +559,9 @@ export default function Insumos() {
       </div>}
       {exclusaoPendente && <ConfirmacaoAcao
         id="estoque-confirmar-exclusao"
-        titulo="Excluir insumo?"
-        mensagem={`O item "${exclusaoPendente.nome}" será excluído dos cadastros.`}
-        confirmar="Excluir"
+        titulo="Remover insumo?"
+        mensagem={`O insumo "${exclusaoPendente.nome}" deixará de aparecer nos cadastros. Os dados e o histórico serão preservados.`}
+        confirmar="Remover"
         perigosa
         onCancelar={() => setExclusaoPendente(null)}
         onConfirmar={() => {

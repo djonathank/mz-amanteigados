@@ -119,7 +119,7 @@ export default function Categorias() {
     try {
       await excluirCategoriaFinanceira(db, selecionada.id)
       await carregar()
-      setMensagem(`Categoria ${selecionada.nome} excluída com sucesso!`)
+      setMensagem(`Categoria ${selecionada.nome} removida. Os dados foram preservados.`)
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }

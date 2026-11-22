@@ -93,10 +93,7 @@ export async function salvarCliente(db: Db, input: Omit<ClienteRow, 'id'> & { id
 export async function excluirCliente(db: Db, id: string) {
   const t = agora()
   await db.transaction(async () => {
-    await db.run('UPDATE cliente SET nome=?, telefone=NULL, endereco=NULL, aniversario=NULL, observacoes=NULL, deleted_at=?, updated_at=? WHERE id=?',
-      ['Cliente removido', t, t, id])
-    await db.run('UPDATE venda SET cliente_id=NULL, updated_at=? WHERE cliente_id=? AND deleted_at IS NULL', [t, id])
-    await db.run('UPDATE encomenda SET cliente_id=NULL, updated_at=? WHERE cliente_id=? AND deleted_at IS NULL', [t, id])
+    await db.run('UPDATE cliente SET deleted_at=?, updated_at=? WHERE id=?', [t, t, id])
   })
 }
 

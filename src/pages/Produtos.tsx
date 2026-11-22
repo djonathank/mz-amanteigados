@@ -314,7 +314,7 @@ export default function Produtos() {
       await carregar()
       if (editando === selecionado.id) limpar()
       setErro('')
-      setConfirmacao('Produto excluído.')
+      setConfirmacao('Produto removido. Os dados foram preservados.')
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e))
     }
@@ -363,9 +363,9 @@ export default function Produtos() {
       <AlertaConclusao mensagem={confirmacao} onConcluir={() => setConfirmacao('')} />
       {produtoPendente && <ConfirmacaoAcao
         id="produto-confirmar-exclusao"
-        titulo="Excluir produto?"
-        mensagem={`Tem certeza que deseja excluir o produto ${produtoPendente.nome} e suas variantes?`}
-        confirmar="Excluir"
+        titulo="Remover produto?"
+        mensagem={`O produto ${produtoPendente.nome} deixará de aparecer nos cadastros. Os dados e as variantes serão preservados.`}
+        confirmar="Remover"
         perigosa
         onCancelar={() => setProdutoPendente(null)}
         onConfirmar={() => void excluir()}

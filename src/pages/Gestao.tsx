@@ -248,7 +248,7 @@ export default function Gestao({ tela }: Props) {
       if (pendente.tipo === 'cliente') await excluirCliente(db, pendente.row.id)
       else await excluirFornecedor(db, pendente.row.id)
       await carregar()
-      setConfirmacao(pendente.tipo === 'cliente' ? 'Dados pessoais do cliente removidos.' : 'Fornecedor excluído.')
+      setConfirmacao(pendente.tipo === 'cliente' ? 'Cliente removido. Os dados foram preservados.' : 'Fornecedor removido. Os dados foram preservados.')
     } catch (error) {
       setErro(error instanceof Error ? error.message : String(error))
     }
@@ -345,7 +345,7 @@ export default function Gestao({ tela }: Props) {
               <div className="contact-row-actions">
                 <button className="lk icon-action" type="button" aria-label={`Editar ${client.nome}`} title="Editar"
                   onClick={() => editarCadastro(client)}><Icon name="edit" /></button>
-                <button className="lk icon-action" type="button" aria-label={`Remover dados de ${client.nome}`} title="Remover dados"
+                <button className="lk icon-action" type="button" aria-label={`Remover ${client.nome}`} title="Remover cliente"
                   onClick={() => setExclusaoPendente({ tipo: 'cliente', row: client })}><Icon name="trash" /></button>
               </div>
             </div>)}
@@ -369,11 +369,11 @@ export default function Gestao({ tela }: Props) {
 
       {exclusaoPendente && <ConfirmacaoAcao
         id="gestao-confirmar-exclusao"
-        titulo={exclusaoPendente.tipo === 'cliente' ? 'Remover dados do cliente?' : 'Excluir fornecedor?'}
+        titulo={exclusaoPendente.tipo === 'cliente' ? 'Remover cliente?' : 'Excluir fornecedor?'}
         mensagem={exclusaoPendente.tipo === 'cliente'
-          ? `Os dados pessoais de "${exclusaoPendente.row.nome}" serão removidos. O histórico financeiro será mantido sem vínculo ao cliente.`
-          : `O fornecedor "${exclusaoPendente.row.nome}" será excluído.`}
-        confirmar={exclusaoPendente.tipo === 'cliente' ? 'Remover dados' : 'Excluir'}
+          ? `O cliente "${exclusaoPendente.row.nome}" deixará de aparecer na lista. Os dados cadastrados e os vínculos do histórico serão preservados.`
+          : `O fornecedor "${exclusaoPendente.row.nome}" deixará de aparecer na lista. Os dados serão preservados.`}
+        confirmar={exclusaoPendente.tipo === 'cliente' ? 'Remover cliente' : 'Remover fornecedor'}
         perigosa
         onCancelar={() => setExclusaoPendente(null)}
         onConfirmar={() => void confirmarExclusao()}

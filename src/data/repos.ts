@@ -215,13 +215,7 @@ export async function excluirInsumo(db: Db, id: string) {
     throw new Error('Este insumo está em uso por uma receita ou embalagem. Remova essas referências antes de excluir.')
   }
   const t = agora()
-  await db.transaction(async () => {
-    await db.run(
-      'UPDATE movimento_estoque SET deleted_at=?, updated_at=? WHERE item_tipo=? AND item_id=? AND deleted_at IS NULL',
-      [t, t, 'insumo', id],
-    )
-    await db.run('UPDATE insumo SET deleted_at = ?, ativo = 0, updated_at = ? WHERE id = ?', [t, t, id])
-  })
+  await db.run('UPDATE insumo SET deleted_at=?, updated_at=? WHERE id=?', [t, t, id])
 }
 
 export interface ReceitaRow {
@@ -949,21 +943,10 @@ export async function salvarProduto(
   return id
 }
 
-export const excluirProduto = (db: Db, id: string) =>
-  db.transaction(async () => {
-    const t = agora()
-    const variantes = await db.query<{ id: string }>(
-      'SELECT id FROM produto_variante WHERE produto_id=? AND deleted_at IS NULL', [id],
-    )
-    await db.run('UPDATE produto_variante SET deleted_at=?, updated_at=? WHERE produto_id=? AND deleted_at IS NULL', [t, t, id])
-    for (const variante of variantes) {
-      await db.run(
-        'UPDATE movimento_estoque SET deleted_at=?, updated_at=? WHERE item_tipo=? AND item_id=? AND deleted_at IS NULL',
-        [t, t, 'variante', variante.id],
-      )
-    }
-    await db.run('UPDATE produto SET deleted_at=?, updated_at=? WHERE id=?', [t, t, id])
-  })
+export const excluirProduto = (db: Db, id: string) => {
+  const t = agora()
+  return db.run('UPDATE produto SET deleted_at=?, updated_at=? WHERE id=?', [t, t, id])
+}
 
 export async function registrarVenda(
   db: Db,

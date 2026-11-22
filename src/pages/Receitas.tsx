@@ -254,7 +254,7 @@ export default function Receitas() {
     try {
       await excluirReceita(db, selecionada.id)
       if (editando === selecionada.id) limpar()
-      setAviso(`Receita ${selecionada.nome} excluída com sucesso!`)
+      setAviso(`Receita ${selecionada.nome} removida. Os dados foram preservados.`)
       try {
         await carregar()
       } catch (e) {
@@ -353,9 +353,9 @@ export default function Receitas() {
       </section></div>}
       {receitaPendente && <ConfirmacaoAcao
         id="receita-confirmar-exclusao"
-        titulo="Excluir receita?"
-        mensagem={`Tem certeza que deseja excluir a receita ${receitaPendente.nome}?`}
-        confirmar="Excluir"
+        titulo="Remover receita?"
+        mensagem={`A receita ${receitaPendente.nome} deixará de aparecer nos cadastros. Os dados serão preservados.`}
+        confirmar="Remover"
         perigosa
         onCancelar={() => setReceitaPendente(null)}
         onConfirmar={() => void apagar()}
