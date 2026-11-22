@@ -19,7 +19,7 @@ const CORES_EXTRAS = [
   '#775C8B', '#3F7260',
 ]
 const CORES_DISPONIVEIS = [...CORES_INICIAIS, ...CORES_EXTRAS]
-const normalizarNome = (valor: string) => valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 20)
+const normalizarNome = (valor: string) => valor.replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').slice(0, 20)
 const resumirNome = (nome: string) => Array.from(nome).length > 20 ? `${Array.from(nome).slice(0, 17).join('')}...` : nome
 
 export default function Categorias() {

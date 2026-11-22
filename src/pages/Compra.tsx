@@ -24,7 +24,7 @@ const UNIDADES: [string, string][] = [
 const FORMAS_PAGAMENTO: [string, string][] = [
   ['pix', 'Pix'], ['dinheiro', 'Dinheiro'], ['cartao_debito', 'Cartão de débito'],
   ['cartao_credito', 'Cartão de crédito'], ['transferencia', 'Transferência'],
-  ['boleto', 'Boleto'], ['outro', 'Outro'],
+  ['boleto', 'Boleto']
 ]
 type LinhaCompra = { id: string; insumoId: string; quantidade: string; unidade: string; total: string }
 const novaLinha = (): LinhaCompra => ({ id: crypto.randomUUID(), insumoId: '', quantidade: '', unidade: '', total: '' })
@@ -543,8 +543,8 @@ export default function Compra() {
           {compraDetalhe.vencimento && <p>Vencimento: {new Date(compraDetalhe.vencimento).toLocaleDateString('pt-BR')}</p>}
           {compraDetalhe.cancelada_em && <p className="notice warning">Cancelada em {new Date(compraDetalhe.cancelada_em).toLocaleString('pt-BR')}: {compraDetalhe.motivo_cancelamento}</p>}
           {!compraDetalhe.pago && !compraDetalhe.cancelada_em && <>
-            <Selecao rotulo="Forma de pagamento" id="compra.forma-quitar" valor={formaPagamentoDetalhe}
-              onChange={setFormaPagamentoDetalhe} opcoes={FORMAS_PAGAMENTO} />
+            <Selecao rotulo="Forma de pagamento" id="compra.forma-quitar" valor={formaPagamentoLabel(compraDetalhe.forma_pagamento)}
+              onChange={setFormaPagamentoDetalhe} opcoes={[['pendente', 'A definir'], ...FORMAS_PAGAMENTO]} />
             <button className="bt" type="button" onClick={() => void marcarComoPago(compraDetalhe.id)}>Pagar</button>
             <button className="bt o" type="button" onClick={() => void abrirEdicao(compraDetalhe)}>
               {/* <Icon name="edit" />  */}

@@ -978,10 +978,13 @@ export async function registrarVenda(
   antesDeConfirmar?: (vendaId: string, data: string) => Promise<void>,
 ): Promise<string> {
   const discount = v.descontoCents ?? 0
+  const formasValidas = ['pix', 'dinheiro', 'cartao', 'cartao_debito', 'cartao_credito']
   if (!v.itens.length || v.itens.some((i) => !(i.quantidade > 0) || i.precoCents < 0 || i.custoCents < 0)
     || !Number.isInteger(discount) || discount < 0) {
     throw new Error('Adicione itens válidos à venda')
   }
+  if (!formasValidas.includes(v.forma)) throw new Error('Selecione uma forma de pagamento válida.')
+  if (!v.clienteId) throw new Error('Selecione um cliente para registrar a venda.')
   const id = novoId()
   const t = agora()
   const subtotal = v.itens.reduce((s, i) => s + i.quantidade * i.precoCents, 0)
@@ -989,8 +992,9 @@ export async function registrarVenda(
   const total = subtotal - discount
   const pagamentoPendente = false
   const reason = v.motivoEstoqueNegativo?.trim() ?? ''
+  const pagamentoCartao = v.forma.startsWith('cartao') || v.forma === 'cartao'
   const [configTax] = await db.query<{ valor: string }>('SELECT valor FROM config WHERE chave=?', [
-    v.forma === 'cartao' ? 'taxa_cartao' : v.forma === 'pix' ? 'taxa_pix' : 'taxa_dinheiro',
+    pagamentoCartao ? 'taxa_cartao' : v.forma === 'pix' ? 'taxa_pix' : 'taxa_dinheiro',
   ])
   const taxaPercentual = Math.max(0, Number(configTax?.valor ?? 0))
   await db.transaction(async () => {
@@ -1035,7 +1039,7 @@ export async function registrarVenda(
           pagamentoPendente ? 0 : 1, 1, 'venda', id, t, t],
       )
     }
-    if (taxaPercentual > 0 && ['pix', 'cartao'].includes(v.forma)) {
+    if (taxaPercentual > 0 && (v.forma === 'pix' || pagamentoCartao)) {
       await db.run(
         `INSERT INTO lancamento
          (id, tipo, categoria, valor_cents, data, vencimento, pago, negocio, origem_tipo, origem_id, created_at, updated_at)

@@ -27,6 +27,7 @@ export interface Db {
 }
 
 let aberto: Promise<Db> | null = null
+let persistenciaEmFila: Promise<void> = Promise.resolve()
 const onChangeListeners = new Set<() => void>()
 let suspenderNotificacoes = 0
 
@@ -70,7 +71,6 @@ async function abrir(): Promise<Db> {
     await sqlite.initWebStore()
   }
   const conn = await sqlite.createConnection(NOME, false, 'no-encryption', 1, false)
-  if (web) await conn.delete()
   await conn.open()
   await conn.execute('PRAGMA foreign_keys = ON')
 
@@ -109,8 +109,8 @@ async function abrir(): Promise<Db> {
     await conn.run('INSERT INTO _migracoes (versao) VALUES (3)', [], false)
   }
   // Migration scripts 004, 006, 008 and 009 were removed from the project.
-  // Versions 4 and 6 only changed demo rows; 8 cleared demo rows. The web
-  // database is recreated empty, so those data-only migrations are unnecessary.
+  // Versions 4 and 6 only changed demo rows; 8 cleared demo rows. These
+  // data-only migrations are unnecessary for databases created after their removal.
   const feita5 = await conn.query('SELECT versao FROM _migracoes WHERE versao = 5')
   if (!feita5.values?.length) {
     const cols = await conn.query('PRAGMA table_info(config)')
@@ -243,7 +243,17 @@ async function abrir(): Promise<Db> {
     await conn.run('INSERT INTO _migracoes (versao) VALUES (19)', [], false)
   }
   let emTransacao = false
-  const persistir = async () => { /* Spreadsheet is the persistent store. */ }
+  const persistir = async () => {
+    if (!web) return
+    // jeep-sqlite keeps the open database in memory until it is saved to its
+    // IndexedDB store. Serialize writes so concurrent repository operations
+    // cannot race while taking snapshots of the same database.
+    const proximaGravacao = persistenciaEmFila
+      .catch(() => undefined)
+      .then(() => sqlite.saveToStore(NOME))
+    persistenciaEmFila = proximaGravacao
+    await proximaGravacao
+  }
   const rollbackTransacaoAtiva = async () => {
     if ((await conn.isTransactionActive()).result) await conn.rollbackTransaction()
   }
@@ -312,5 +322,8 @@ async function abrir(): Promise<Db> {
       notifyDatabaseChanged()
     },
   }
+  // Persist the initial schema and migrations too, so reopening the web app
+  // resumes the same local database before any cloud sync is available.
+  await persistir()
   return db
 }

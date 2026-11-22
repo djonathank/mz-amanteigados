@@ -1853,21 +1853,13 @@ h3,
   opacity: 0.8;
 }
 
-#estoque\.tipo,
-#estoque\.filtro-tipo,
-#estoque\.ordenacao,
-#estoque\.filtro-movimento,
-#insumo\.tipo {
-  color: var(--mu);
-  opacity: 0.8;
-}
 
-[id^="compra.insumo."]:invalid,
+/* [id^="compra.insumo."]:invalid,
 [id^="compra.unidade."]:invalid,
 #compra\.fornecedor:invalid {
   color: var(--mu);
   opacity: 0.8;
-}
+} */
 
 .fl select option {
   color: var(--ink);

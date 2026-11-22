@@ -357,7 +357,9 @@ function solicitarTokenWeb(): Promise<TokenResponse> {
       client_id: clientId,
       scope: SCOPES.join(' '),
       callback: (response) => response.error
-        ? reject(new Error(response.error))
+        ? reject(new Error(response.error === 'invalid_client'
+          ? `O Google recusou o cliente OAuth para esta origem: ${window.location.origin}. Cadastre esta origem exata em Origens JavaScript autorizadas do cliente Web no Google Cloud Console.`
+          : response.error))
         : response.access_token
           ? resolve(response)
           : reject(new Error('O Google não retornou um token de acesso.')),

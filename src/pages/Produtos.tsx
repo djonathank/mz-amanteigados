@@ -488,7 +488,7 @@ export default function Produtos() {
               adicionar()
               setVarianteModalAberta(false)
             }} disabled={!vn.trim() || vn.trim().length > 200 || !medidaValida || !(Number(preco) > 0)} data-testid="produto.adicionar-embalagem">
-              {editandoLinha == null ? 'Adicionar variante' : 'Salvar variante'}
+              {editandoLinha == null ? 'Adicionar' : 'Salvar'}
             </button>
           </div>
         </section>
