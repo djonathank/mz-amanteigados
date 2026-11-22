@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDb } from '../data/DbContext'
 import { excluirInsumo, listarInsumos, salvarInsumo, type InsumoRow } from '../data/repos'
-import { formatBRL } from '../domain/money'
+import { formatBRL, formatBRLUnitario } from '../domain/money'
 import { baseOf, formatQuantity, toBase, type Unit } from '../domain/units'
 import { ajustarEstoque, definirEstoqueMinimoInsumo, listarAlertasEstoque, listarMovimentos } from '../data/phase2'
 import { gerarCsv } from '../data/reports'
@@ -627,8 +627,8 @@ export default function Insumos() {
             <div className="stock-row-content">
               <span className="stock-row-name" title={insumo.nome}>{insumo.nome}</span>
               <small>Tipo: {TIPOS.find(([tipo]) => tipo === insumo.tipo)?.[1] ?? insumo.tipo}</small>
-              <small>{formatBRL(insumo.custo_medio * insumo.fator_compra)} por {insumo.unidade_compra}</small>
-              <small>Saldo: {formatQuantity(Number(insumo.estoque_atual ?? 0))} {insumo.unidade_base} · mínimo: {formatQuantity(Number(insumo.estoque_minimo ?? 0))} {insumo.unidade_base}</small>
+              <small>Valor cadastrado: {formatBRLUnitario(insumo.custo_medio * toBase(1, insumo.unidade_compra as Unit))} por {insumo.unidade_compra}</small>
+              <small>Saldo: {formatQuantity(Number(insumo.estoque_atual ?? 0) / Number(insumo.fator_compra || 1))} {insumo.unidade_compra} · Mínimo: {formatQuantity(Number(insumo.estoque_minimo ?? 0))} {insumo.unidade_base}</small>
             </div>
             <div className="stock-primary-actions">
               <button className="lk icon-action" aria-label={`Editar ${insumo.nome}`} title="Editar" onClick={() => editar(insumo)}><Icon name="edit" /></button>
@@ -710,8 +710,7 @@ export default function Insumos() {
         </div>
         {unidade === 'un' && !quantidadeUnitariaValida && <p className="notice error" role="alert">Para unidades, informe uma quantidade inteira.</p>}
         <Campo rotulo="Valor total (R$)" id="insumo.preco" valor={preco} onChange={setPreco} mascara="dinheiro" />
-        {unidade === 'kg' && <p className="helper">O custo será convertido automaticamente para centavos por grama.</p>}
-        {unidade === 'l' && <p className="helper">O custo será convertido automaticamente para centavos por mililitro.</p>}
+        {(unidade === 'kg' || unidade === 'l') && <p className="helper">O estoque é controlado na unidade base ({baseOf(unidade)}); quantidade e valor informados permanecem na unidade selecionada.</p>}
         <Campo rotulo={`Estoque mínimo${unidade ? ` (${baseOf(unidade)})` : ''}`} id="insumo.estoque-minimo"
           valor={estoqueMinimo} onChange={(value) => setEstoqueMinimo(filtrarNumeroSemMascara(value, false))}
           inputMode="numeric" limite={10} placeholder="0" />

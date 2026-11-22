@@ -73,7 +73,7 @@ export default function Custos() {
       {carregando ? <p className="notice" role="status">Carregando custos...</p> : (
         <div className="cd">
           <h2>Custos e taxas</h2>
-          <div className="settings-grid">
+          <div className="settings-grid costs-settings-grid">
             {CAMPOS.map(([key, rotulo, , mascara]) => (
               <Campo key={key} rotulo={rotulo} id={`custos.${key}`} valor={valores[key] ?? ''}
                 mascara={mascara}

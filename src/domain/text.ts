@@ -10,7 +10,7 @@ export function formatarTelefone(valor: string): string {
   if (digitos.length <= 2) return digitos ? `(${digitos}` : ''
   const ddd = digitos.slice(0, 2)
   const numero = digitos.slice(2)
-  return numero.length > 8
+  return numero.length > 8 || (numero.length === 8 && numero.startsWith('9'))
     ? `(${ddd}) ${numero.slice(0, 5)}-${numero.slice(5)}`
     : `(${ddd}) ${numero.slice(0, 4)}${numero.length > 4 ? `-${numero.slice(4)}` : ''}`
 }

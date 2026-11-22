@@ -831,11 +831,38 @@ textarea {
   opacity: 0.8;
 }
 .date-picker-trigger[aria-expanded="true"] { border-color: var(--go); }
-.date-picker-overlay { z-index: 30; }
+.alert-overlay.date-picker-overlay {
+  z-index: 30;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-width: none;
+  align-items: start;
+  justify-items: center;
+  box-sizing: border-box;
+  padding-top: max(150px, calc(env(safe-area-inset-top, 0px) + 24px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+
+/* The card entrance animation creates a transformed containing block. Remove
+   it while the calendar is open so the fixed overlay is centered in viewport. */
+.stock-movements:has(.date-picker-overlay) {
+  animation: none;
+  transform: none;
+}
 
 .date-picker-dialog {
   position: relative;
+  margin: 0 auto;
+  align-self: start;
+  justify-self: center;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
   width: min(100%, 380px);
+  min-width: 0;
+  box-sizing: border-box;
   padding: 24px 20px 20px;
   border: 1px solid var(--ln);
   border-radius: 24px;
@@ -851,6 +878,7 @@ textarea {
   border-radius: 23px 23px 0 0;
   background: var(--br-linear-gradient);
   color: #f6e7c9;
+  text-align: center;
 }
 
 .date-picker-heading p {
@@ -881,12 +909,15 @@ textarea {
   align-items: end;
   gap: 8px;
   margin-bottom: 8px;
+  justify-items: center;
 }
 
 .date-picker-selectors {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px;
   gap: 8px;
+  width: 100%;
+  text-align: center;
 }
 
 .date-picker-selectors label {
@@ -972,7 +1003,7 @@ textarea {
 
 .date-picker-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 8px;
   margin-top: 14px;
 }
@@ -2219,8 +2250,34 @@ a.bt {
   width: min(100%, 620px);
   max-height: min(92dvh, 820px);
   overflow-y: auto;
+  min-width: 0;
   scrollbar-width: none;
   padding-top: 30px;
+}
+
+.costs-settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.costs-settings-grid > * {
+  min-width: 0;
+}
+
+.settings-grid {
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.settings-grid > *,
+.form-dialog .fl,
+.form-dialog .g {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .costs-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .date-picker-dialog { padding-right: 14px; padding-left: 14px; }
+  .date-picker-heading { margin-right: -14px; margin-left: -14px; padding-right: 48px; padding-left: 14px; }
 }
 
 .form-dialog .bt {

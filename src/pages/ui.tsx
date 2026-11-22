@@ -61,6 +61,8 @@ export function useModalAcessivel(aberto: boolean, aoFechar: () => void, seletor
       'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
     )].filter((element) => element.getAttribute('aria-hidden') !== 'true')
     const animation = requestAnimationFrame(() => {
+      // Modal dialogs must remain programmatically focusable when opened from
+      // form actions; focus the first control (or the dialog as a fallback).
       const focaveis = obterFocaveis()
       const alvo = modal.querySelector<HTMLElement>('[autofocus]') ?? focaveis[0] ?? modal
       alvo.focus()
@@ -258,13 +260,12 @@ export function SeletorData({
             >{dia.getDate()}</button>
           })}
         </div>
-        <div className="date-picker-actions">
-          {!required && valor && <button className="bt o" type="button" onClick={() => {
+        {!required && valor && <div className="date-picker-actions">
+          <button className="bt o" type="button" onClick={() => {
             onChange('')
             fechar()
-          }}>Limpar data</button>}
-          <button className="bt" type="button" onClick={fechar}>Fechar</button>
-        </div>
+          }}>Limpar data</button>
+        </div>}
       </section>
     </div>}
   </>
@@ -312,6 +313,15 @@ export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limit
       : mascara
         ? '0'
         : `Digite ${rotulo.toLocaleLowerCase('pt-BR')}`
+
+  const focarEntrada = (input: HTMLInputElement) => {
+    if (!mascara || document.activeElement === input) return
+    requestAnimationFrame(() => {
+      if (!input.isConnected || input.disabled) return
+      input.focus()
+      input.select()
+    })
+  }
 
   const atualizarComMascara = (input: HTMLInputElement) => {
     if (!mascara) {
@@ -365,6 +375,7 @@ export const Campo = ({ rotulo, id, valor, onChange, tipo = 'text', passo, limit
         disabled={disabled}
         readOnly={readOnly}
         data-testid={id}
+        onClick={(event) => focarEntrada(event.currentTarget)}
         onMouseDown={(event) => {
           if (mascara && document.activeElement !== event.currentTarget) {
             event.preventDefault()
